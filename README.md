@@ -10,7 +10,7 @@ Please refer to Helm's [documentation](https://helm.sh/docs/) to get started.
 Once Helm is set up properly, add the repo as follows:
 
 ```console
-helm repo add globalart https://globalartinc.github.io/charts
+helm repo add globalart https://globalartinc.github.io/helm-charts
 ```
 
 You can then run `helm search repo globalart` to see the charts.
@@ -23,4 +23,4 @@ Chart documentation is available in charts directoris.
 ## License
 
 <!-- Keep full URL links to repo files because this README syncs from main to gh-pages.  -->
-[Apache 2.0 License](https://github.com/GlobalArtInc/charts/blob/main/LICENSE).
+[Apache 2.0 License](https://github.com/GlobalArtInc/helm-charts/blob/main/LICENSE).
