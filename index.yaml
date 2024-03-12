@@ -3,11 +3,11 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v1
     appVersion: 1.2.3
-    created: "2024-03-12T06:55:20.347236631Z"
+    created: "2024-03-12T06:57:57.225527963Z"
     description: ISPManager  cert-manager ACME webhook
-    digest: 241f19611581de6118f79b6a119931bc4805d0399f197cc5527d2b710713adc0
+    digest: 7d9094b066af8b346547a6aeaa3e91651886bd10eb842117e0f03c4b746535a0
     name: cert-manager-webhook-ispmanager
     urls:
     - https://GlobalArtInc.github.io/helm-charts/cert-manager-webhook-ispmanager-1.2.3.tgz
     version: 1.2.3
-generated: "2024-03-12T06:55:20.346807966Z"
+generated: "2024-03-12T06:57:57.225100945Z"
