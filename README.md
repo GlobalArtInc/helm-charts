@@ -15,12 +15,12 @@ helm repo add globalart https://globalartinc.github.io/helm-charts
 
 You can then run `helm search repo globalart` to see the charts.
 
-<!-- Keep full URL links to repo files because this README syncs from main to gh-pages.  -->
+<!-- Keep full URL links to repo files because this README syncs from master to gh-pages.  -->
 Chart documentation is available in charts directoris.
 
 ## Contributing
 
 ## License
 
-<!-- Keep full URL links to repo files because this README syncs from main to gh-pages.  -->
+<!-- Keep full URL links to repo files because this README syncs from master to gh-pages.  -->
 [Apache 2.0 License](https://github.com/GlobalArtInc/helm-charts/blob/main/LICENSE).
