@@ -3,9 +3,9 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v1
     appVersion: 1.2.3
-    created: "2024-10-22T22:30:05.500304205Z"
+    created: "2024-10-22T22:50:31.896476785Z"
     description: ISPManager Cert-Manager ACME webhook
-    digest: 52aa5b8cdf09db2b7c93208d2187e69c082cd8132c608f2763244c6d415e25f3
+    digest: 6c4c229d88807c810ad0421bb2e3d114d04fbcf0ba5cb1756a8b477c5391b89f
     name: cert-manager-webhook-ispmanager
     urls:
     - https://GlobalArtInc.github.io/helm-charts/cert-manager-webhook-ispmanager-1.2.3.tgz
@@ -13,11 +13,11 @@ entries:
   gitlab-mr-combiner:
   - apiVersion: v1
     appVersion: 1.0.0
-    created: "2024-10-22T22:30:05.500657439Z"
+    created: "2024-10-22T22:50:31.897082304Z"
     description: Gitlab MR Combiner
-    digest: 03701646d2b3ca11bc495f7b83adfd7446f74526280a05dfbfc37b79e04e721d
+    digest: 5b1e294d578d5dc967c444765c4f4f85a9622b6815301b08d6c544ef1e47cfd3
     name: gitlab-mr-combiner
     urls:
     - https://GlobalArtInc.github.io/helm-charts/gitlab-mr-combiner-1.0.0.tgz
     version: 1.0.0
-generated: "2024-10-22T22:30:05.499677928Z"
+generated: "2024-10-22T22:50:31.894719994Z"
