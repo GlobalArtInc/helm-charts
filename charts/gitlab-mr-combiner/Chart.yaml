@@ -1,0 +1,5 @@
+apiVersion: v1
+name: gitlab-mr-combiner
+appVersion: "1.0.0"
+description: Gitlab MR Combiner
+version: 1.0.0

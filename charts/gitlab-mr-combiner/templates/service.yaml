@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gitlab-mr-combiner.fullname" . }}
+  labels:
+{{ include "gitlab-mr-combiner.labels" . | indent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ include "gitlab-mr-combiner.name" . }}
+    release: {{ .Release.Name }}
