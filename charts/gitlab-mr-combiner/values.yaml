@@ -34,6 +34,7 @@ secret:
     your ssh key here
     -----END OPENSSH PRIVATE KEY-----
   gitlabToken: "<your access_token>"
+  secretToken: "<your secret_token>"
 
 podSecurityContext: {}
 # fsGroup: 2000

@@ -37,6 +37,11 @@ spec:
               secretKeyRef:
                 name: {{ .Chart.Name }}-secrets
                 key: gitlabToken
+          - name: SECRET_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Chart.Name }}-secrets
+                key: secretToken
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           volumeMounts:
