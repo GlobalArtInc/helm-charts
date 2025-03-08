@@ -20,6 +20,7 @@ serviceAccount:
   # If not set and create Ff true, a name is generated using the fullname template
   name:
 
+
 configMap:
   triggerMessage: "/specific-message"
   triggerTag: "specific_tag"
@@ -58,6 +59,7 @@ ingress:
   host: chart-example.local
   tlsSecretName: chart-example-tls
   defaultPath: "/"
+  defaultPrefix: "Prefix"
 
 resources: {}
 # We usually recommend not to specify default resources and to leave this as a conscious
