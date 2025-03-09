@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: globalartltd/gitlab-mr-combiner
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 imagePullSecrets: []
 nameOverride: ""
