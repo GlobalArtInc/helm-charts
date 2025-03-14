@@ -48,4 +48,5 @@ tolerations: []
 affinity: {}
 
 # to avoid flowcontrol access errors if they are present
-clusterRoleApiGroups: { flowControlResources: true }
+clusterRoleApiGroups:
+  flowControlResources: true
