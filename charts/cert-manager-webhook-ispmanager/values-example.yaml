@@ -1,0 +1,49 @@
+groupName: acme.ispmanager.com
+
+certManager:
+  namespace: cert-manager
+  serviceAccountName: cert-manager
+
+replicaCount: 1
+
+image:
+  repository: globalartltd/cert-manager-webhook-ispmanager
+  tag: latest
+  pullPolicy: Always
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+podSecurityContext:
+  fsGroup: 65534
+
+clusterRoleApiGroups:
+  flowControlResources: true
+
+apiVersionOverrides:
+  flowcontrol: "flowcontrol.apiserver.k8s.io/v1"
+
+webhook:
+  mutating: false
+  validating: true
+  failurePolicy: Fail
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
+
+extraEnv:
+  - name: LOG_LEVEL
+    value: "info"

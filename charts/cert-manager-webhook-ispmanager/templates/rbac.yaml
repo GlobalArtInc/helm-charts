@@ -16,7 +16,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "cert-manager-webhook-ispmanager.fullname" . }}
-  namespace: {{ .Values.certManager.namespace }}
+  namespace: {{ .Values.certManager.space }}
   labels:
     app: {{ include "cert-manager-webhook-ispmanager.name" . }}
     chart: {{ include "cert-manager-webhook-ispmanager.chart" . }}
@@ -135,6 +135,7 @@ subjects:
     name: {{ .Values.certManager.serviceAccountName }}
     namespace: {{ .Values.certManager.namespace }}
 
+{{- if .Values.clusterRoleApiGroups.flowControlResources }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -147,7 +148,7 @@ metadata:
     heritage: {{ .Release.Service }}
 rules:
   - apiGroups:
-      - "flowcontrol.apiserver.k8s.io"
+      - {{ .Values.apiVersionOverrides.flowcontrol | default "flowcontrol.apiserver.k8s.io" }}
     resources:
       - 'prioritylevelconfigurations'
       - 'flowschemas'
@@ -173,3 +174,4 @@ subjects:
     kind: ServiceAccount
     name: {{ include "cert-manager-webhook-ispmanager.fullname" . }}
     namespace: {{ .Release.Namespace | quote }}
+{{- end }}

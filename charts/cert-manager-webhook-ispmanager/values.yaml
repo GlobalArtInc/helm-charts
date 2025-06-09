@@ -11,6 +11,7 @@ groupName: acme.ispmanager.com
 certManager:
   namespace: cert-manager
   serviceAccountName: cert-manager
+  install: false
 
 replicaCount: 1
 
@@ -31,13 +32,13 @@ service:
   port: 443
   annotations: {}
 
-resources: {}
-# limits:
-#  cpu: 100m
-#  memory: 128Mi
-# requests:
-#  cpu: 100m
-#  memory: 128Mi
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
 
 podAnnotations: {}
 
@@ -47,6 +48,28 @@ tolerations: []
 
 affinity: {}
 
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+podSecurityContext:
+  fsGroup: 65534
+
 # to avoid flowcontrol access errors if they are present
 clusterRoleApiGroups:
   flowControlResources: true
+
+webhook:
+  mutating: false
+  validating: true
+  failurePolicy: Fail
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
+
+apiVersionOverrides:
+  flowcontrol: "flowcontrol.apiserver.k8s.io/v1"

@@ -8,6 +8,10 @@ metadata:
     chart: {{ include "cert-manager-webhook-ispmanager.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
