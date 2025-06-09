@@ -62,7 +62,7 @@ podSecurityContext:
 
 # to avoid flowcontrol access errors if they are present
 clusterRoleApiGroups:
-  flowControlResources: true
+  flowControlResources: false
 
 webhook:
   mutating: false

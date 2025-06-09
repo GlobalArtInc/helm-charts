@@ -1,8 +1,8 @@
 apiVersion: v2
 name: cert-manager-webhook-ispmanager
-appVersion: "1.2.4"
+appVersion: "1.2.5"
 description: ISPManager Cert-Manager ACME webhook
-version: 1.2.4
+version: 1.2.5
 home: https://github.com/globalartinc/helm-charts
 maintainers:
   - name: GlobalArt Inc
