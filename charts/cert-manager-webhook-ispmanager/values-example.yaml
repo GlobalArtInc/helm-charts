@@ -34,9 +34,6 @@ podSecurityContext:
 clusterRoleApiGroups:
   flowControlResources: true
 
-apiVersionOverrides:
-  flowcontrol: "flowcontrol.apiserver.k8s.io/v1"
-
 webhook:
   mutating: false
   validating: true

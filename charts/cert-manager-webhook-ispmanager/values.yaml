@@ -17,13 +17,17 @@ replicaCount: 1
 
 image:
   repository: globalartltd/cert-manager-webhook-ispmanager
-  tag: latest
-  pullPolicy: Always
+  tag: "v1.11.0"
+  pullPolicy: IfNotPresent
 
 nameOverride: ""
 fullnameOverride: ""
 
-extraEnv: []
+extraEnv:
+  - name: KLOG_V
+    value: "0"
+  - name: KLOG_ALSOLOGTOSTDERR
+    value: "false"
 # - name: SOME_VAR
 #   value: "some value"
 
@@ -70,6 +74,3 @@ webhook:
   failurePolicy: Fail
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]
-
-apiVersionOverrides:
-  flowcontrol: "flowcontrol.apiserver.k8s.io/v1"
