@@ -26,6 +26,31 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # CryptoPro CSP on Linux expects a key container as a SUBDIRECTORY named
+        # "<container-name>.000" under the keys root, owned by the app user —
+        # not flat files. Secret volumes are always root-owned and read-only,
+        # so we copy them into an emptyDir with the right layout/ownership.
+        - name: prepare-keys
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p "/keys-prepared/{{ .Values.keys.containerName }}.000"
+              cp -L /keys-raw/*.key "/keys-prepared/{{ .Values.keys.containerName }}.000/"
+              chown -R 1000:1000 /keys-prepared
+              chmod -R 600 "/keys-prepared/{{ .Values.keys.containerName }}.000"/*.key
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: keys-raw
+              mountPath: /keys-raw
+              readOnly: true
+            - name: keys
+              mountPath: /keys-prepared
       containers:
         - name: smev4-agent
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -50,7 +75,6 @@ spec:
               readOnly: true
             - name: keys
               mountPath: /var/opt/cprocsp/keys/app
-              readOnly: true
             {{- if .Values.certs.existingSecret }}
             - name: certs
               mountPath: /egov/java/certs
@@ -70,9 +94,11 @@ spec:
         - name: config
           secret:
             secretName: {{ include "smev4-agent.configSecretName" . }}
-        - name: keys
+        - name: keys-raw
           secret:
             secretName: {{ include "smev4-agent.keysSecretName" . }}
+        - name: keys
+          emptyDir: {}
         {{- if .Values.certs.existingSecret }}
         - name: certs
           secret:

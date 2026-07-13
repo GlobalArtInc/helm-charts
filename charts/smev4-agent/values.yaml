@@ -79,9 +79,16 @@ config:
     </included>
 
 # CryptoPro keys (keys/ directory, mounted at /var/opt/cprocsp/keys/app).
-# Required for startup — provide via an existing Secret.
+# Required for startup — provide via an existing Secret containing the flat
+# header.key/masks.key/masks2.key/name.key/primary.key/primary2.key files.
+# An initContainer copies them into a "<containerName>.000" subdirectory
+# owned by uid 1000, since CryptoPro CSP requires that exact layout on Linux
+# and Secret volumes are always root-owned/read-only.
 keys:
   existingSecret: ""
+  # Must match the container name/alias encoded in name.key (also used as
+  # keys.alias in application.yml).
+  containerName: ""
 
 # Optional certificates (certs/ directory, mounted at /egov/java/certs)
 certs:
