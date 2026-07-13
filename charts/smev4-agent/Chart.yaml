@@ -1,0 +1,15 @@
+apiVersion: v2
+name: smev4-agent
+appVersion: "3.29.1"
+description: Helm chart for deploying the SMEV4 (einfahrt) agent wrapped in globalartltd/smev4-agent
+version: 0.1.0
+home: https://github.com/globalartinc/helm-charts
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.com
+keywords:
+  - smev
+  - smev4
+  - einfahrt
+  - gosuslugi
+kubeVersion: ">=1.22.0"

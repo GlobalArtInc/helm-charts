@@ -6,6 +6,7 @@ This repository contains [Helm](https://helm.sh) charts for various projects
 
 * [CertManager Webhook ISP Manager](https://github.com/GlobalArtInc/cert-manager-webhook-ispmanager)
 * [Gitlab MR Combiner](https://github.com/GlobalArtInc/gitlab-mr-combiner)
+* [SMEV4 Agent](https://github.com/GlobalArtInc/smev4-agent)
 
 ## Usage
 

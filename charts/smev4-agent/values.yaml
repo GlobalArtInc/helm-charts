@@ -1,0 +1,93 @@
+replicaCount: 1
+
+image:
+  repository: globalartltd/smev4-agent
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# uid=1000 is required by the vendor for CryptoPro keys to work correctly
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+service:
+  type: ClusterIP
+  ports:
+    jdbc: 8183
+    rest: 8192
+    apiGw: 8171
+    apiGwTarget: 8172
+
+resources: {}
+# resources:
+#   requests:
+#     cpu: 500m
+#     memory: 1Gi
+#   limits:
+#     cpu: "2"
+#     memory: 2Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# SMEV hosts resolved directly by IP (taken from the vendor's run.sh)
+hostAliases:
+  - ip: "172.20.59.5"
+    hostnames:
+      - podd.gosuslugi.ru
+      - podd-cross.gosuslugi.ru
+  - ip: "109.207.15.26"
+    hostnames:
+      - podd1.gosuslugi.ru
+      - podd1-cross.gosuslugi.ru
+  - ip: "109.207.15.58"
+    hostnames:
+      - podd2.gosuslugi.ru
+      - podd2-cross.gosuslugi.ru
+  - ip: "109.207.15.154"
+    hostnames:
+      - podd3.gosuslugi.ru
+      - podd3-cross.gosuslugi.ru
+  - ip: "109.207.15.186"
+    hostnames:
+      - podd4.gosuslugi.ru
+      - podd4-cross.gosuslugi.ru
+
+# Agent's application.yml. Contains secrets (agent.id, agent.ogrn which is
+# also used as keys.password) — by default rendered into a Secret created by
+# this chart from the value below. For production, prefer setting it via
+# --set-file config.applicationYml=... or point to an external Secret
+# (see existingSecret).
+config:
+  # If set, the chart renders this content into a Secret. Leave empty and
+  # set existingSecret instead if the configuration is managed separately.
+  applicationYml: ""
+  # Name of a pre-existing Secret containing the application.yml key.
+  # If set, config.applicationYml is ignored.
+  existingSecret: ""
+
+  customLogLevelsXml: |
+    <included>
+        <!--logger name="org.apache.kafka" level="warn" /-->
+        <!--logger name="org.apache.pulsar" level="warn" /-->
+        <!--variable name="ROOT_LOG_LEVEL" value="info" /-->
+        <!--logger name="ru.rtlabs" level="debug" /-->
+    </included>
+
+# CryptoPro keys (keys/ directory, mounted at /var/opt/cprocsp/keys/app).
+# Required for startup — provide via an existing Secret.
+keys:
+  existingSecret: ""
+
+# Optional certificates (certs/ directory, mounted at /egov/java/certs)
+certs:
+  existingSecret: ""
+
+# Optional CryptoPro CSP license (falls back to trial licensing otherwise)
+license:
+  existingSecret: ""
+  secretKey: csp.lic

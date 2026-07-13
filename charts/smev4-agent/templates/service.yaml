@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "smev4-agent.fullname" . }}
+  labels:
+    {{- include "smev4-agent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "smev4-agent.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: jdbc
+      port: {{ .Values.service.ports.jdbc }}
+      targetPort: jdbc
+    - name: rest
+      port: {{ .Values.service.ports.rest }}
+      targetPort: rest
+    - name: api-gw
+      port: {{ .Values.service.ports.apiGw }}
+      targetPort: api-gw
+    - name: api-gw-target
+      port: {{ .Values.service.ports.apiGwTarget }}
+      targetPort: api-gw-target

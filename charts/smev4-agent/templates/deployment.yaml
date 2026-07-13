@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "smev4-agent.fullname" . }}
+  labels:
+    {{- include "smev4-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "smev4-agent.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "smev4-agent.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      {{- if .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml .Values.hostAliases | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: smev4-agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: jdbc
+              containerPort: {{ .Values.service.ports.jdbc }}
+            - name: rest
+              containerPort: {{ .Values.service.ports.rest }}
+            - name: api-gw
+              containerPort: {{ .Values.service.ports.apiGw }}
+            - name: api-gw-target
+              containerPort: {{ .Values.service.ports.apiGwTarget }}
+          volumeMounts:
+            - name: config
+              mountPath: /egov/java/application.yml
+              subPath: application.yml
+              readOnly: true
+            - name: config
+              mountPath: /chgCfgTmp/customLogLevels.xml
+              subPath: customLogLevels.xml
+              readOnly: true
+            - name: keys
+              mountPath: /var/opt/cprocsp/keys/app
+              readOnly: true
+            {{- if .Values.certs.existingSecret }}
+            - name: certs
+              mountPath: /egov/java/certs
+              readOnly: true
+            {{- end }}
+            {{- if .Values.license.existingSecret }}
+            - name: license
+              mountPath: /egov/csp.lic
+              subPath: {{ .Values.license.secretKey }}
+              readOnly: true
+            {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "smev4-agent.configSecretName" . }}
+        - name: keys
+          secret:
+            secretName: {{ include "smev4-agent.keysSecretName" . }}
+        {{- if .Values.certs.existingSecret }}
+        - name: certs
+          secret:
+            secretName: {{ .Values.certs.existingSecret }}
+        {{- end }}
+        {{- if .Values.license.existingSecret }}
+        - name: license
+          secret:
+            secretName: {{ .Values.license.existingSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
