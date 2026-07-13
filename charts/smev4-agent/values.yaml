@@ -87,7 +87,11 @@ keys:
 certs:
   existingSecret: ""
 
-# Optional CryptoPro CSP license (falls back to trial licensing otherwise)
+# Optional CryptoPro CSP license (falls back to trial licensing otherwise).
+# Set either value (rendered into the chart-managed Secret below) or
+# existingSecret (an external Secret you manage yourself). If existingSecret
+# is set, value is ignored.
 license:
+  value: ""
   existingSecret: ""
   secretKey: csp.lic

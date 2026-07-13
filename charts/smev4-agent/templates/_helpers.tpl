@@ -27,3 +27,11 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{ fail "keys.existingSecret is required: mount CryptoPro keys via an existing Secret" }}
 {{- end -}}
 {{- end -}}
+
+{{- define "smev4-agent.licenseSecretName" -}}
+{{- if .Values.license.existingSecret -}}
+{{ .Values.license.existingSecret }}
+{{- else -}}
+{{ include "smev4-agent.fullname" . }}-license
+{{- end -}}
+{{- end -}}

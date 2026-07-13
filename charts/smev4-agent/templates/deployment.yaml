@@ -56,7 +56,7 @@ spec:
               mountPath: /egov/java/certs
               readOnly: true
             {{- end }}
-            {{- if .Values.license.existingSecret }}
+            {{- if or .Values.license.value .Values.license.existingSecret }}
             - name: license
               mountPath: /egov/csp.lic
               subPath: {{ .Values.license.secretKey }}
@@ -78,10 +78,10 @@ spec:
           secret:
             secretName: {{ .Values.certs.existingSecret }}
         {{- end }}
-        {{- if .Values.license.existingSecret }}
+        {{- if or .Values.license.value .Values.license.existingSecret }}
         - name: license
           secret:
-            secretName: {{ .Values.license.existingSecret }}
+            secretName: {{ include "smev4-agent.licenseSecretName" . }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
