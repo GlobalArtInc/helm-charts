@@ -1,0 +1,15 @@
+name: ""
+host: ""
+gateway:
+  name: moscow-gateway
+  namespace: envoy-gateway-system
+issuer: letsencrypt
+certificate:
+  enabled: true
+  secretName: ""
+  grantName: ""
+route:
+  enabled: true
+  viaGatewayHttp: false
+  backends: []
+  rules: []
