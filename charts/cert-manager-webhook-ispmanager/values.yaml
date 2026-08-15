@@ -17,7 +17,7 @@ replicaCount: 1
 
 image:
   repository: globalartltd/cert-manager-webhook-ispmanager
-  tag: "1.16.3"
+  tag: "1.16.3-b3"
   pullPolicy: IfNotPresent
 
 nameOverride: ""
