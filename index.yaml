@@ -3,6 +3,25 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v2
     appVersion: 1.2.5
+    created: "2026-08-15T10:15:36.192518044Z"
+    description: ISPManager Cert-Manager ACME webhook
+    digest: 12ea47f8de4b6cf39700186a3de01d79404afb5b54754180ca6bc25e1eac6533
+    home: https://github.com/globalartinc/helm-charts
+    keywords:
+    - cert-manager
+    - webhook
+    - acme
+    - ispmanager
+    kubeVersion: '>=1.22.0'
+    maintainers:
+    - email: support@globalart.com
+      name: GlobalArt Inc
+    name: cert-manager-webhook-ispmanager
+    urls:
+    - https://GlobalArtInc.github.io/helm-charts/cert-manager-webhook-ispmanager-1.2.9.tgz
+    version: 1.2.9
+  - apiVersion: v2
+    appVersion: 1.2.5
     created: "2026-08-15T09:56:50.795276419Z"
     description: ISPManager Cert-Manager ACME webhook
     digest: be97039802ea7adb1e60267a49a0538989f8949ef3a1255c97094a8d5d0f2982
@@ -108,18 +127,18 @@ entries:
   gitlab-mr-combiner:
   - apiVersion: v1
     appVersion: 1.0.0
-    created: "2026-08-15T09:56:50.795983229Z"
+    created: "2026-08-15T10:15:36.192904869Z"
     description: Gitlab MR Combiner
-    digest: 3355ef06da7cceb7744a19b500457538a0b77e15ffaf334db52fded2a3b6a396
+    digest: 18fa534686afef69acac6906e8aa0386a7463f40fcec6b89799c3a8eba8497fa
     name: gitlab-mr-combiner
     urls:
     - https://GlobalArtInc.github.io/helm-charts/gitlab-mr-combiner-1.0.0.tgz
     version: 1.0.0
   route:
   - apiVersion: v2
-    created: "2026-08-15T09:56:50.796193812Z"
+    created: "2026-08-15T10:15:36.193116154Z"
     description: 'Публикация приложения через шлюз: сертификат, слушатель и маршрут'
-    digest: 5f3e1f7ce6345d158ea2564531594e141d88db82fe29c2e8315a1284d7b406b6
+    digest: 0fdfe3fc157a8134174b4289780b7bf446a15942f85834975ef2198946681907
     name: route
     type: application
     urls:
@@ -128,9 +147,9 @@ entries:
   smev4-agent:
   - apiVersion: v2
     appVersion: 3.29.1
-    created: "2026-08-15T09:56:50.79650828Z"
+    created: "2026-08-15T10:15:36.193581255Z"
     description: Helm chart for deploying the SMEV4 (einfahrt) agent wrapped in globalartltd/smev4-agent
-    digest: f1fa84d2cddaa16a40ee3de05b00a3f1dbe623b746493314f884696f32c28945
+    digest: ed113287cdbb49572f1a0111d52d5432b3c184408245d171381c5d419486561d
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - smev
@@ -145,4 +164,4 @@ entries:
     urls:
     - https://GlobalArtInc.github.io/helm-charts/smev4-agent-0.1.0.tgz
     version: 0.1.0
-generated: "2026-08-15T09:56:50.794734233Z"
+generated: "2026-08-15T10:15:36.191120876Z"
