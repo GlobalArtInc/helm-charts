@@ -41,15 +41,25 @@ spec:
             - --tls-cert-file=/tls/tls.crt
             - --tls-private-key-file=/tls/tls.key
             - --secure-port=8443
+          {{- $env := dict }}
+          {{- range concat (list
+                (dict "name" "GROUP_NAME" "value" (.Values.groupName | toString))
+                (dict "name" "GODEBUG" "value" "x509ignoreCN=0")
+                (dict "name" "KLOG_V" "value" "2"))
+              (.Values.extraEnv | default list) }}
+          {{- $_ := set $env .name . }}
+          {{- end }}
           env:
-            - name: GROUP_NAME
-              value: {{ .Values.groupName | quote }}
-            - name: GODEBUG
-              value: "x509ignoreCN=0"
-            - name: KLOG_V
-              value: "2"
-          {{- with .Values.extraEnv }}
-          {{- toYaml . | nindent 12 }}
+          {{- range $name := keys $env | sortAlpha }}
+          {{- $e := get $env $name }}
+            - name: {{ $name }}
+            {{- if hasKey $e "value" }}
+              value: {{ $e.value | quote }}
+            {{- end }}
+            {{- with $e.valueFrom }}
+              valueFrom:
+                {{- toYaml . | nindent 16 }}
+            {{- end }}
           {{- end }}
           ports:
             - name: https
