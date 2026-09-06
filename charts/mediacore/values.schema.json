@@ -113,6 +113,31 @@
         "apiSecret": { "type": "string" },
         "existingSecret": { "type": "string" }
       }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Publishing on a cluster without Gateway API. additionalProperties is false here for the same reason it is false under sfu.config: the block is one misspelling away from failing silently. An annotations key written annotation would drop the WebSocket timeouts, and a deployment whose calls end after a minute with nothing in any log is not a thing to find out in production.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "host": {
+          "type": "string",
+          "description": "Bare hostname, no scheme and no path; empty means route.host.",
+          "pattern": "^$|^[A-Za-z0-9*._-]+$"
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Controller-specific and not portable: the defaults are ingress-nginx timeouts, and another controller ignores them and needs its own."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": { "type": "string" }
+          }
+        }
+      }
     }
   }
 }

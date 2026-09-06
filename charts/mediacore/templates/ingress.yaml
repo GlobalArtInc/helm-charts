@@ -1,0 +1,66 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := include "mediacore.ingress.host" . }}
+{{/*
+The other way to publish, for a cluster without Gateway API. Same hostname and
+the same path split as templates/route.yaml, taken from the same helper: pathType
+Prefix matches whole path segments the way Gateway API's PathPrefix does, so
+/rtc here and /rtc there select the same requests, and the longest match wins
+whatever order the rules are written in.
+
+What is not here, and cannot be, is media. It is UDP on sfu.ports.media,
+addressed to the node itself; no ingress controller carries it and none can.
+This object publishes the page and the signalling WebSocket. sfu.hostNetwork and
+sfu.advertise still decide whether anybody hears anything.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "mediacore.fullname" . }}-ingress
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+  {{- /*
+  Quoted one at a time rather than through toYaml, because the timeouts below
+  are numbers that have to reach the API server as strings, and an operator who
+  passes one with --set passes an integer.
+  */}}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls.secretName }}
+  tls:
+    - hosts:
+        - {{ $host }}
+      secretName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          {{- if .Values.sfu.enabled }}
+          {{- range (include "mediacore.sfu.paths" $ | fromYamlArray) }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "mediacore.sfu.fullname" $ }}
+                port:
+                  number: {{ $.Values.sfu.ports.signalling }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.front.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "mediacore.front.fullname" . }}
+                port:
+                  number: {{ .Values.front.port }}
+          {{- end }}
+{{- end }}

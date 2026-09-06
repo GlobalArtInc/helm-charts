@@ -31,6 +31,42 @@ The API page at /swagger is not published; reach it with
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "mediacore.sfu.fullname" . }} {{ .Values.sfu.ports.signalling }}:{{ .Values.sfu.ports.signalling }}
 {{- end }}
 {{- end }}
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.route.enabled }}
+
+{{ if .Values.front.enabled -}}
+The room is at https://{{ include "mediacore.ingress.host" . }}
+{{- else -}}
+Signalling is published at https://{{ include "mediacore.ingress.host" . }}/rtc; this release has no front end.
+{{- end }}
+{{- if and .Values.sfu.enabled (not .Values.route.swagger) }}
+The API page at /swagger is not published; reach it with
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "mediacore.sfu.fullname" . }} {{ .Values.sfu.ports.signalling }}:{{ .Values.sfu.ports.signalling }}
+{{- end }}
+{{- end }}
+{{- if .Values.sfu.enabled }}
+
+An Ingress carries HTTP. It does not carry media and no ingress controller can:
+udp/{{ .Values.sfu.ports.media }} still goes straight to the node, so sfu.hostNetwork and the advertised
+address above are still what decide whether anybody hears anything.
+{{- end }}
+{{- if .Values.sfu.enabled }}
+
+The signalling WebSocket needs an idle timeout longer than the quiet stretches
+of a call. The chart ships the two ingress-nginx annotations for it; on any
+other controller set that controller's own equivalent, or everyone is dropped
+about a minute in with nothing in any log:
+
+  kubectl get ingress -n {{ .Release.Namespace }} {{ include "mediacore.fullname" . }}-ingress -o jsonpath='{.metadata.annotations}'
+{{- end }}
+{{- if .Values.route.enabled }}
+
+route.enabled is on as well, so this name is published twice -- by the gateway
+and by the ingress controller -- and which one answers is decided by DNS. That
+is the arrangement for moving between them; turn the other off once you have.
+{{- end }}
+{{- end }}
 {{- if .Values.sfu.enabled }}
 
 Upgrading this release ends every meeting in progress: the SFU keeps its rooms

@@ -14,7 +14,7 @@ turn the SFU off to run the page against one somewhere else.
 ```
                         the cluster
     ┌──────────────────────────────────────────────────┐
-    │  gateway (Envoy)  443/tcp                        │
+    │  gateway (Envoy) or ingress controller  443/tcp  │
     │    ├── /rtc*, /twirp*  ──►  sfu   :7880          │
     │    └── /                ──►  front :8080         │
     │                                                  │
@@ -60,12 +60,12 @@ the node's address, a front end behind it, and one hostname carrying both.
 
 ## The three things that will bite you
 
-### 1. Media is UDP and does not go through the gateway
+### 1. Media is UDP and goes through neither the gateway nor an Ingress
 
-An `HTTPRoute` carries HTTP. Media is UDP, it is addressed to the SFU directly,
-and the pod IP is not routable from a browser, so something has to put that
-socket where clients can reach it. The chart offers three ways and defaults to
-the first:
+An `HTTPRoute` carries HTTP, and so does an `Ingress`. Media is UDP, it is
+addressed to the SFU directly, and the pod IP is not routable from a browser, so
+something has to put that socket where clients can reach it. The chart offers
+three ways and defaults to the first:
 
 | | what it does | what it costs |
 |---|---|---|
@@ -135,10 +135,13 @@ talks to the SFU, and it scales and rolls freely.
 
 ## Publishing
 
-The cluster runs Gateway API behind Envoy Gateway, so there is no Ingress here.
-`route.enabled` renders a `ListenerSet` on the shared gateway and an `HTTPRoute`
-in the same shape as the [`route`](../route) chart, with `/rtc` and `/twirp` on
-the SFU and everything else on the front end.
+Two ways, and they are alternatives rather than layers. `route.enabled` (the
+default) renders a `ListenerSet` on the shared gateway and an `HTTPRoute` in the
+same shape as the [`route`](../route) chart; `ingress.enabled` renders one
+`Ingress` instead, for a cluster that has no Gateway API. Either way it is one
+hostname with `/rtc` and `/twirp` on the SFU and everything else on the front
+end — the split is written once in the chart and both objects read it, so they
+cannot come to disagree about which request belongs to which backend.
 
 **One hostname, deliberately.** The front end may only be handed a scheme and a
 bare host for the WebSocket — it appends `/rtc` itself and refuses a URL with a
@@ -163,8 +166,71 @@ kubectl port-forward svc/<release>-mediacore-sfu 7880:7880
 With it off, a request to `/swagger` falls through to the front end and answers
 404, which reads exactly like a broken build. That is expected.
 
-Publishing some other way is `route.enabled: false`, and then `front.wsUrl` has
-to be set by hand.
+Publishing some other way — neither of these — is `route.enabled: false` with
+`ingress.enabled: false`, and then `front.wsUrl` has to be set by hand.
+
+### With an Ingress
+
+```console
+helm install meet globalart/mediacore \
+  --set image.repository=registry.example.com/mediacore \
+  --set-string auth.apiSecret="$(openssl rand -hex 32)" \
+  --set route.enabled=false \
+  --set ingress.enabled=true \
+  --set ingress.host=meet.example.com \
+  --set ingress.className=nginx \
+  --set ingress.tls.secretName=wildcard-example-com
+```
+
+`ingress.host` defaults to `route.host`, so a values file that already names the
+host does not name it twice. `route.swagger` governs `/swagger` here too: one
+split, one switch. TLS is an existing Secret **in this namespace** — an Ingress
+reads no Secret from anywhere else, so a shared wildcard has to be copied here
+(reflector, external-secrets, by hand) and there is no `ReferenceGrant` to make.
+Leaving `ingress.tls.secretName` empty renders no `tls` block and serves the
+name over plain http, on which browsers refuse to hand out a microphone at all
+outside localhost.
+
+**It does not carry media.** Nothing in this section changes anything in
+["Media is UDP"](#1-media-is-udp-and-goes-through-neither-the-gateway-nor-an-ingress)
+above:
+`udp/7882` still goes straight to the node, `sfu.hostNetwork` still decides how
+it gets there, and `sfu.advertise` still decides whether anyone hears anything.
+An Ingress publishes the page and the signalling WebSocket. That is all it can
+do.
+
+**The WebSocket dies on the default timeouts.** ingress-nginx closes an upstream
+connection that has been quiet for 60 seconds, and a signalling WebSocket
+carries nothing while a call is simply going on, so the room works for about a
+minute and then drops everybody at once — with nothing in the SFU's log, because
+from its side the proxy closed the connection and that is not an error. The
+chart ships the fix as a default:
+
+```yaml
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+```
+
+Those are ingress-nginx annotations and nothing else reads them. They are an
+idle timeout rather than a limit on the length of a call — any signalling
+traffic resets it — and on another controller they are inert, so set that
+controller's own equivalent instead: Traefik has it on the entrypoint
+(`respondingTimeouts`) and not on an annotation, an AWS ALB has
+`alb.ingress.kubernetes.io/load-balancer-attributes:
+idle_timeout.timeout_seconds=3600` over a default of 60, GKE takes a
+`BackendConfig` with `timeoutSec` over a default of 30, and the two HAProxy
+controllers each spell a tunnel timeout their own way. Prove it with a call that
+sits quiet for two minutes; joining, talking and leaving never reproduces it.
+
+**Both at once, on one name, is allowed.** It is how a live deployment moves
+from the gateway to an ingress controller: both publish the hostname with the
+same paths, you move the DNS record, then you turn the old one off. Two
+*different* names fails the render instead, because the front end is built with
+exactly one WebSocket URL and whoever arrived on the other name would get a page
+whose WebSocket the browser refuses in silence. (With `front.enabled: false`
+there is no page and no such URL, so two names are allowed there.)
 
 ## Secrets
 
@@ -229,8 +295,9 @@ through the same three failures in more detail.
 
 ## What this chart deliberately does not do
 
-- **No Ingress.** The cluster is on Gateway API; media would not go through one
-  anyway.
+- **No Ingress by default.** The cluster this chart comes from is on Gateway
+  API. `ingress.enabled` is there for clusters that are not, and media goes
+  through neither of them.
 - **No `Certificate` by default.** The wildcards already exist, and a second
   order for a name that is already certified is a way to lose a working Secret.
 - **No PersistentVolumeClaim.** mediacore writes nothing to disk today, which is

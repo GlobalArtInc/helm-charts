@@ -100,19 +100,14 @@ spec:
     - {{ .Values.route.host }}
   rules:
     {{- if .Values.sfu.enabled }}
-    # /rtc is the signalling WebSocket and its validation probe; /twirp is the
-    # room service the backoffice calls with a token it signed itself.
+    # The same list the Ingress publishes, from mediacore.sfu.paths: one split,
+    # so the two ways of publishing cannot disagree about which request belongs
+    # to which backend.
     - matches:
+        {{- range (include "mediacore.sfu.paths" . | fromYamlArray) }}
         - path:
             type: PathPrefix
-            value: /rtc
-        - path:
-            type: PathPrefix
-            value: /twirp
-        {{- if .Values.route.swagger }}
-        - path:
-            type: PathPrefix
-            value: /swagger
+            value: {{ . }}
         {{- end }}
       backendRefs:
         - name: {{ include "mediacore.sfu.fullname" . }}

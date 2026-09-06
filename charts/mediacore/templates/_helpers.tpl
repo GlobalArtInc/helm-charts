@@ -74,6 +74,48 @@ to be the same pair or the page loads and joining fails.
 {{- end -}}
 
 {{/*
+The paths the SFU owns, in one place because they are published twice: by the
+HTTPRoute and, on clusters without Gateway API, by the Ingress. Two lists would
+drift, and the drift is silent -- a /rtc that lands on the front end answers 404
+to the signalling WebSocket, which the browser reports as a connection that
+closed and nothing else. Everything not listed here belongs to the front end.
+
+/rtc is the signalling WebSocket and its validation probe; /twirp is the room
+service the backoffice calls with a token it signed itself; /swagger is the
+generated API page, published only when route.swagger says so -- one switch,
+because there is one split.
+*/}}
+{{- define "mediacore.sfu.paths" -}}
+- /rtc
+- /twirp
+{{- if .Values.route.swagger }}
+- /swagger
+{{- end }}
+{{- end -}}
+
+{{/*
+The hostname the Ingress publishes. Empty means route.host: the page and the
+WebSocket have to share one origin whoever publishes them, so the name is
+written once even when the route itself is switched off.
+*/}}
+{{- define "mediacore.ingress.host" -}}
+{{- default .Values.route.host .Values.ingress.host -}}
+{{- end -}}
+
+{{/*
+The name this release is reachable under, whichever object publishes it. Empty
+when nothing does, which is a legitimate deployment -- somebody else's proxy in
+front -- and then front.wsUrl has to be stated by hand.
+*/}}
+{{- define "mediacore.publishedHost" -}}
+{{- if and .Values.route.enabled .Values.route.host -}}
+{{- .Values.route.host -}}
+{{- else if .Values.ingress.enabled -}}
+{{- include "mediacore.ingress.host" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 What the browser is told to open for signalling. The front end accepts a scheme
 and a bare host and nothing else -- it appends /rtc itself -- so this is derived
 from the published host rather than from any Service address, and the page and
@@ -82,10 +124,10 @@ the WebSocket end up on one origin.
 {{- define "mediacore.front.wsUrl" -}}
 {{- if .Values.front.wsUrl -}}
 {{- .Values.front.wsUrl | trimSuffix "/" -}}
-{{- else if and .Values.route.enabled .Values.route.host -}}
-{{- printf "wss://%s" .Values.route.host -}}
+{{- else if (include "mediacore.publishedHost" .) -}}
+{{- printf "wss://%s" (include "mediacore.publishedHost" .) -}}
 {{- else -}}
-{{- fail "front.wsUrl is not set and there is no route.host to derive it from. The front end has to tell the browser where to open the signalling WebSocket, and it accepts a scheme and a bare host only -- wss://meet.example.com, no path and no trailing slash. Publish the SFU on the same origin as the page: a WebSocket to a second hostname is refused by the browser with nothing shown to the user and nothing logged on the server." -}}
+{{- fail "front.wsUrl is not set and neither route.host nor ingress.host gives a name to derive it from. The front end has to tell the browser where to open the signalling WebSocket, and it accepts a scheme and a bare host only -- wss://meet.example.com, no path and no trailing slash. Publish the SFU on the same origin as the page: a WebSocket to a second hostname is refused by the browser with nothing shown to the user and nothing logged on the server." -}}
 {{- end -}}
 {{- end -}}
 
@@ -139,6 +181,22 @@ manifest of its own.
 {{- if .Values.route.enabled -}}
 {{- if not .Values.route.host -}}
 {{- fail "route.host is not set. It is the hostname visitors type, and both the listener and the route are built from it -- no scheme, no path. Set route.enabled to false if you publish this some other way." -}}
+{{- end -}}
+{{- end -}}
+
+{{- if .Values.ingress.enabled -}}
+{{- if not (include "mediacore.ingress.host" .) -}}
+{{- fail "ingress.enabled is on and there is no hostname to publish. Set ingress.host -- the name visitors type, no scheme and no path -- or leave it empty and set route.host, which it falls back to so that the two ways of publishing cannot name two different origins." -}}
+{{- end -}}
+{{/*
+Two publishers, two names, one front end. Not a duplicate-object check: the same
+name published twice is how a cluster moves from the gateway to an ingress
+controller without a gap, and both objects then serve the same paths to the same
+backends. Two different names is the arrangement that cannot work, because the
+front end is built with exactly one WebSocket URL.
+*/}}
+{{- if and .Values.route.enabled .Values.front.enabled (ne (include "mediacore.ingress.host" .) .Values.route.host) -}}
+{{- fail (printf "route.enabled publishes this release on %s and ingress.enabled publishes it on %s. The front end is handed one WebSocket URL for every visitor -- wss://%s here -- and a page served from %s may not open a WebSocket to %s: the browser refuses it with nothing shown to the user and nothing logged on the server, so whoever arrives on the second name gets a room that never connects. Publish one name: turn one of the two off, or give both the same host, which is how you move from one to the other without a gap -- both publish it, you move the DNS record, then you turn the old one off. Two names are only sensible with front.enabled: false, where nothing but the SFU's own paths is being published." .Values.route.host (include "mediacore.ingress.host" .) (include "mediacore.publishedHost" .) (include "mediacore.ingress.host" .) .Values.route.host) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

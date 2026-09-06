@@ -340,8 +340,10 @@ front:
   extraEnv: []
 
 # Publishing, in the house shape: a ListenerSet on the shared gateway plus an
-# HTTPRoute, the same pattern as the `route` chart in this repository. No
-# Ingress: the cluster runs Gateway API behind Envoy Gateway.
+# HTTPRoute, the same pattern as the `route` chart in this repository. This is
+# the default because the cluster this chart comes from runs Gateway API behind
+# Envoy Gateway; `ingress` below is the same publishing for a cluster that does
+# not, and the two are alternatives, not layers.
 #
 # The page and signalling must be on ONE origin. The front end may only be
 # handed a bare host, and a page served over https may only open wss to a name
@@ -402,9 +404,91 @@ route:
   # `kubectl port-forward svc/<release>-mediacore-sfu 7880:7880`.
   # Note that with this off, /swagger falls through to the front end and
   # answers 404, which reads exactly like a broken build.
+  #
+  # It lives here rather than under both publishers because there is one path
+  # split and it is written once: this switch governs the Ingress below as well,
+  # route.enabled or not.
   swagger: false
 
   annotations: {}
+
+# The same publishing, as one Ingress, for a cluster that has no Gateway API.
+# One hostname, and the same split as the route above -- /rtc and /twirp (plus
+# /swagger when route.swagger is on) to the SFU, everything else to the front
+# end -- because both objects read that split from one place in the chart and
+# cannot drift apart.
+#
+# IT DOES NOT CARRY MEDIA, and no ingress controller can. Media is UDP on
+# sfu.ports.media addressed to the node, and this object is HTTP: turning it on
+# changes nothing about sfu.hostNetwork, sfu.hostPort or sfu.advertise. Whoever
+# expects an Ingress to end the business with the node's address gets a room
+# where everybody connects, the participant list is right, and nobody hears
+# anything.
+#
+# Both this and route.enabled on the same name is allowed: it is how you move a
+# live deployment from the gateway to an ingress controller -- both publish the
+# name, you move the DNS record, then you turn the old one off. Two *different*
+# names fails the render, because the front end is built with one WebSocket URL
+# and the other name would serve a page that cannot connect.
+ingress:
+  enabled: false
+
+  # Empty means whichever IngressClass the cluster marks as default. If there is
+  # no default, the object is created, no controller ever looks at it, and the
+  # only sign is an Ingress with no ADDRESS in `kubectl get ingress` while the
+  # hostname answers from wherever DNS points instead.
+  className: ""
+
+  # The name visitors type -- no scheme, no path. Empty means route.host, which
+  # is where the name lives even with route.enabled: false; one origin, written
+  # once, because the page and the signalling WebSocket must share it.
+  host: ""
+
+  # ingress-nginx closes an upstream connection that has been quiet for 60
+  # seconds (proxy-read-timeout and proxy-send-timeout, both default 60), and a
+  # signalling WebSocket carries nothing at all while a call is simply going on.
+  # So everybody is dropped about a minute in, together, with nothing in the
+  # SFU's log -- from its side the proxy closed the connection, which is not an
+  # error. These two are here so that the default install does not do that.
+  # They are an idle timeout, not a limit on how long a call may last: any
+  # signalling traffic resets it.
+  #
+  # THEY ARE ingress-nginx ANNOTATIONS AND NOTHING ELSE READS THEM. On another
+  # controller they are inert -- not an error, just ignored -- and you have to
+  # set that controller's own equivalent or you get the same drop at whatever
+  # its own idle timeout is:
+  #
+  #   Traefik      the timeouts are on the entrypoint (respondingTimeouts),
+  #                not on an annotation
+  #   AWS ALB      alb.ingress.kubernetes.io/load-balancer-attributes:
+  #                idle_timeout.timeout_seconds=3600; the ALB default is 60
+  #   GKE / GCE    a BackendConfig with timeoutSec, referenced from the Service;
+  #                the default is 30
+  #   HAProxy      a tunnel timeout of its own, spelled differently by each of
+  #                the two HAProxy ingress controllers
+  #
+  # Whichever it is, prove it with a call that sits quiet for two minutes.
+  # Joining, talking and leaving never reproduces this.
+  #
+  # These are chart defaults and what you set here merges with them; to drop one
+  # rather than change it, set it to null.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+  tls:
+    # An existing certificate Secret, in THIS namespace: an Ingress reads no
+    # Secret from anywhere else, so unlike the route above a shared wildcard has
+    # to be copied here (reflector, external-secrets, or by hand) and there is
+    # nothing for the chart to grant.
+    #
+    # Empty renders no tls block and the controller serves the name over plain
+    # http, which is worth understanding before choosing it: browsers hand out a
+    # microphone on a secure origin only, localhost excepted, so the page loads
+    # and the Join button gets a permission error. front.wsUrl is derived as
+    # wss:// regardless, because TLS is often terminated in front of the
+    # cluster; if nothing terminates it, state front.wsUrl by hand.
+    secretName: ""
 
 # Persistence: deliberately absent. mediacore writes nothing to disk today --
 # rooms, participants and every counter live in the process's memory, which is
