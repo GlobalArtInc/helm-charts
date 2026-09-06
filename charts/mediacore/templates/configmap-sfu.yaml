@@ -1,0 +1,76 @@
+{{- if .Values.sfu.enabled }}
+{{- $config := default dict .Values.sfu.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+data:
+  # A template, not the file the server reads. Two of the values in it are only
+  # known inside the pod -- the signing secret, which belongs in a Secret rather
+  # than here, and the node's own address, which the downward API supplies at
+  # start -- and mediacore does no substitution of its own, so the init
+  # container renders this with envsubst into an emptyDir and points the server
+  # at the result.
+  #
+  # Every key below is one crates/config/src/lib.rs declares. That crate is
+  # written with deny_unknown_fields: one key it does not know and the process
+  # exits at startup, so values.schema.json mirrors it and helm refuses a typo
+  # before it becomes a crash-looping pod.
+  mediacore.yaml.tmpl: |
+    port: {{ .Values.sfu.ports.signalling }}
+    bind_addresses:
+      - 0.0.0.0
+    log_level: {{ $config.log_level | default "info" | quote }}
+    {{- with $config.region }}
+    region: {{ . | quote }}
+    {{- end }}
+    {{- with $config.node_id }}
+    node_id: {{ . | quote }}
+    {{- end }}
+
+    # The api key is the `iss` of every token and the name the secret is looked
+    # up under; the front end signs with the same pair.
+    keys:
+      "${MEDIACORE_API_KEY}": "${MEDIACORE_API_SECRET}"
+    {{- with $config.room }}
+
+    room:
+{{ toYaml . | indent 6 }}
+    {{- end }}
+
+    rtc:
+      # One UDP socket for all media, never a range: a range would have to be
+      # forwarded to the pod port by port, and buys nothing that this port does
+      # not already do.
+      udp_port: {{ .Values.sfu.ports.media }}
+      port_range_start: 0
+      port_range_end: 0
+      bind_address: 0.0.0.0
+
+      # What clients are told to send media to, and the setting that decides
+      # whether anybody hears anything. The socket's own address is 0.0.0.0 and
+      # the pod's address is unroutable from a browser, so the address is
+      # stated here and both of the server's guesses are turned off -- an
+      # inferred address is how a deployment ends up signalling perfectly and
+      # carrying no audio.
+      advertise_addresses:
+      {{- if .Values.sfu.advertise.fromNodeIP }}
+        - "${MEDIACORE_ADVERTISE_IP}"
+      {{- end }}
+      {{- range .Values.sfu.advertise.addresses }}
+        - {{ . | quote }}
+      {{- end }}
+      use_socket_address: false
+      use_external_ip: false
+      {{- with $config.rtc }}
+{{ toYaml . | indent 6 }}
+      {{- end }}
+    {{- with $config.video }}
+
+    video:
+{{ toYaml . | indent 6 }}
+    {{- end }}
+{{- end }}

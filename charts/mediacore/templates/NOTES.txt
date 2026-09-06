@@ -1,0 +1,38 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as {{ .Release.Name }}.
+{{ if .Values.sfu.enabled }}
+Media is the part that fails quietly. The SFU tells every browser to send its
+microphone to:
+{{ if .Values.sfu.advertise.fromNodeIP }}
+  the node's own address (status.hostIP), on udp/{{ .Values.sfu.ports.media }}
+{{- end }}
+{{- range .Values.sfu.advertise.addresses }}
+  {{ . }}{{ if not (regexMatch ":[0-9]+$" (toString .)) }}, on udp/{{ $.Values.sfu.ports.media }}{{ end }}
+{{- end }}
+
+Check that visitors can reach it, and that udp/{{ .Values.sfu.ports.media }} is open to them in the
+node firewall and in any cloud security group -- as UDP; a TCP rule for that
+port does nothing at all. What the server settled on is in its own log:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "mediacore.sfu.fullname" . }} | grep "media transport ready"
+
+If people join, the participant list is right, and nobody hears anything, that
+line and the firewall are the two places to look. Nothing is logged as an error.
+{{- end }}
+{{- if .Values.route.enabled }}
+
+{{ if .Values.front.enabled -}}
+The room is at https://{{ .Values.route.host }}
+{{- else -}}
+Signalling is published at https://{{ .Values.route.host }}/rtc; this release has no front end.
+{{- end }}
+{{- if and .Values.sfu.enabled (not .Values.route.swagger) }}
+The API page at /swagger is not published; reach it with
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "mediacore.sfu.fullname" . }} {{ .Values.sfu.ports.signalling }}:{{ .Values.sfu.ports.signalling }}
+{{- end }}
+{{- end }}
+{{- if .Values.sfu.enabled }}
+
+Upgrading this release ends every meeting in progress: the SFU keeps its rooms
+in memory and tells reconnecting clients the session cannot be resumed.
+{{- end }}

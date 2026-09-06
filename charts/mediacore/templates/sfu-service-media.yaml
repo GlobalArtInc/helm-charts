@@ -1,0 +1,42 @@
+{{- if and .Values.sfu.enabled .Values.sfu.mediaService.enabled }}
+{{/*
+A Service of its own, and not a second port on the signalling one: mixed-
+protocol Services are supported unevenly by cloud load balancers, and this one
+has to be UDP and nothing else.
+
+Whatever address this ends up on has to be what clients are told about. A
+LoadBalancer that keeps the port number wants sfu.advertise.addresses set to its
+address; a NodePort lands on a different port and wants "<node ip>:<node port>".
+Neither is inferred, because an ICE candidate that names the wrong port fails
+with no error on either side.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}-media
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+  {{- with .Values.sfu.mediaService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.sfu.mediaService.type }}
+  {{- with .Values.sfu.mediaService.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- if and .Values.sfu.mediaService.externalTrafficPolicy (ne (toString .Values.sfu.mediaService.type) "ClusterIP") }}
+  externalTrafficPolicy: {{ .Values.sfu.mediaService.externalTrafficPolicy }}
+  {{- end }}
+  selector:
+    {{- include "mediacore.sfu.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: media
+      port: {{ .Values.sfu.ports.media }}
+      targetPort: media
+      protocol: UDP
+      {{- with .Values.sfu.mediaService.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+{{- end }}

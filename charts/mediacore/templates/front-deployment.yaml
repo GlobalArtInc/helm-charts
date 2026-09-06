@@ -1,0 +1,109 @@
+{{- if .Values.front.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mediacore.front.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: front
+spec:
+  # No limit here and no Recreate: the front end holds nothing, talks to
+  # nothing, and only signs tokens the SFU verifies later. Scale it as you like
+  # and roll it whenever -- a browser mid-call is not talking to it.
+  replicas: {{ .Values.front.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mediacore.front.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.front.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mediacore.front.selectorLabels" . | nindent 8 }}
+        {{- with .Values.front.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "mediacore.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.front.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.front.terminationGracePeriodSeconds }}
+      {{- with .Values.front.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: front
+          image: {{ include "mediacore.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # One image carries both binaries and its CMD is the SFU, so the
+          # front end has to be named.
+          command:
+            - /usr/local/bin/mediacore-front
+          env:
+            {{- include "mediacore.authEnv" . | nindent 12 }}
+            # Scheme and bare host: the page opens this + /rtc itself, and the
+            # front end refuses to start on a url carrying a path. It has to be
+            # the origin the page is served from, or the browser refuses the
+            # WebSocket without showing the visitor anything.
+            - name: MEDIACORE_FRONT_WS_URL
+              value: {{ include "mediacore.front.wsUrl" . | quote }}
+            - name: MEDIACORE_FRONT_ROOM
+              value: {{ .Values.front.room | quote }}
+            - name: MEDIACORE_FRONT_PORT
+              value: {{ .Values.front.port | quote }}
+            {{- with .Values.front.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.front.port }}
+              protocol: TCP
+          {{- if .Values.front.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.front.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.front.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.front.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.front.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.front.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.front.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.front.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.front.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.front.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- with .Values.front.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.front.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.front.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.front.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.front.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

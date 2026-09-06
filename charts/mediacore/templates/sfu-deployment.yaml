@@ -1,0 +1,202 @@
+{{- if .Values.sfu.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+spec:
+  replicas: {{ .Values.sfu.replicaCount }}
+  # Recreate, not a rolling update. On hostNetwork a second pod cannot bind
+  # ports the first one still holds, and even where it could, it would know
+  # nothing about the rooms already running in the old process. The cost is
+  # worth saying out loud: every rollout of this workload -- an image change, a
+  # config change, a node drain -- ends every meeting in progress, and the
+  # clients are told the session cannot be resumed.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mediacore.sfu.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Without this a `helm upgrade` that only changes the config leaves the
+        # old process running with the old settings and nothing to say so.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-sfu.yaml") . | sha256sum }}
+        {{- with .Values.sfu.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mediacore.sfu.selectorLabels" . | nindent 8 }}
+        {{- with .Values.sfu.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "mediacore.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sfu.hostNetwork }}
+      hostNetwork: true
+      # Not optional with hostNetwork: on the plain ClusterFirst policy the pod
+      # inherits the node's resolver and resolves nothing inside the cluster.
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with .Values.sfu.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.sfu.terminationGracePeriodSeconds }}
+      {{- with .Values.sfu.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # The server reads a YAML file and expands nothing in it, so the two
+        # values that only exist at run time are substituted here: the signing
+        # secret, which comes from a Secret and must not sit in a ConfigMap,
+        # and the node's own address, which the downward API supplies. envsubst
+        # is in the image already -- mediacore's own Dockerfile installs
+        # gettext-base for deploy/start-sfu.sh, which does exactly this.
+        #
+        # The checks below are the ones worth failing on. Each of them produces
+        # a deployment that starts, signals, and carries no audio, and a pod
+        # that refuses to start with a line in its log is far easier to
+        # diagnose than a room where everybody is silent.
+        - name: render-config
+          image: {{ include "mediacore.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              fail() {
+                echo "mediacore: $1" >&2
+                exit 1
+              }
+
+              [ -n "${MEDIACORE_API_KEY:-}" ] || fail "the api key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.apiKey }}"
+              [ -n "${MEDIACORE_API_SECRET:-}" ] || fail "the api secret is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.apiSecret }}"
+              if [ "${#MEDIACORE_API_SECRET}" -lt 32 ]; then
+                fail "the api secret is shorter than 32 characters; the front end refuses to start below that, and the two halves would disagree about which tokens are valid"
+              fi
+              {{- if .Values.sfu.advertise.fromNodeIP }}
+
+              [ -n "${MEDIACORE_ADVERTISE_IP:-}" ] || fail "status.hostIP came through empty, so there is no node address to advertise"
+              case "$MEDIACORE_ADVERTISE_IP" in
+                0.0.0.0|::|127.*|::1)
+                  fail "the node address is $MEDIACORE_ADVERTISE_IP, which no client outside this node can send media to"
+                  ;;
+              esac
+              {{- end }}
+
+              umask 077
+              envsubst '${MEDIACORE_API_KEY} ${MEDIACORE_API_SECRET} ${MEDIACORE_ADVERTISE_IP}' \
+                </etc/mediacore/mediacore.yaml.tmpl >/run/mediacore/mediacore.yaml
+
+              echo "mediacore: media will be advertised as {{ if .Values.sfu.advertise.fromNodeIP }}$MEDIACORE_ADVERTISE_IP{{ end }}{{ range .Values.sfu.advertise.addresses }} {{ . }}{{ end }} on udp/{{ .Values.sfu.ports.media }}" >&2
+          env:
+            {{- include "mediacore.authEnv" . | nindent 12 }}
+            {{- if .Values.sfu.advertise.fromNodeIP }}
+            # The node's address, which with hostNetwork or a hostPort is
+            # exactly where clients send their media.
+            - name: MEDIACORE_ADVERTISE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            {{- end }}
+          {{- with .Values.sfu.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config-template
+              mountPath: /etc/mediacore
+              readOnly: true
+            - name: config
+              mountPath: /run/mediacore
+      containers:
+        - name: sfu
+          image: {{ include "mediacore.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The image's CMD is this binary already; only the config path has to
+          # be said, and it is said through the variable clap reads so that the
+          # entrypoint stays whatever the image ships.
+          env:
+            - name: MEDIACORE_CONFIG
+              value: /run/mediacore/mediacore.yaml
+            {{- with .Values.sfu.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: signalling
+              containerPort: {{ .Values.sfu.ports.signalling }}
+              protocol: TCP
+            - name: media
+              containerPort: {{ .Values.sfu.ports.media }}
+              protocol: UDP
+              {{- if .Values.sfu.hostPort }}
+              # Published on the node by the CNI. Same number on both sides,
+              # always: ICE replies leave the pod from the port the socket
+              # bound, and a translated port breaks the candidate the browser
+              # was handed.
+              hostPort: {{ .Values.sfu.ports.media }}
+              {{- end }}
+          {{- if .Values.sfu.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: signalling
+            initialDelaySeconds: {{ .Values.sfu.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.sfu.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.sfu.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.sfu.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.sfu.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: signalling
+            initialDelaySeconds: {{ .Values.sfu.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.sfu.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.sfu.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.sfu.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- with .Values.sfu.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.sfu.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /run/mediacore
+              readOnly: true
+      volumes:
+        - name: config-template
+          configMap:
+            name: {{ include "mediacore.sfu.fullname" . }}
+        # Memory-backed: the rendered file carries the token-signing secret and
+        # has no business on a node's disk.
+        - name: config
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+      {{- with .Values.sfu.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sfu.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sfu.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

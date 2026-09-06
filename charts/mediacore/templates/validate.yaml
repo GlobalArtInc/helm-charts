@@ -1,0 +1,6 @@
+{{/*
+Renders nothing. It is where the checks in _helpers.tpl are run, so that a
+release which would install a silent room, or two SFUs that cannot hear each
+other, fails at `helm install` with a reason instead of at 3am with none.
+*/}}
+{{- include "mediacore.validate" . -}}

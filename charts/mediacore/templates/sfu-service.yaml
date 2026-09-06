@@ -1,0 +1,27 @@
+{{- if .Values.sfu.enabled }}
+{{/*
+Signalling only, and TCP only. Media never comes through a Service unless
+sfu.mediaService is turned on: kube-proxy is one more translation in a path
+where the client was handed an address and a port to talk to directly.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+  {{- with .Values.sfu.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.sfu.service.type }}
+  selector:
+    {{- include "mediacore.sfu.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: signalling
+      port: {{ .Values.sfu.ports.signalling }}
+      targetPort: signalling
+      protocol: TCP
+{{- end }}

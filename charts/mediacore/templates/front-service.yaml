@@ -1,0 +1,22 @@
+{{- if .Values.front.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mediacore.front.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: front
+  {{- with .Values.front.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.front.service.type }}
+  selector:
+    {{- include "mediacore.front.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.front.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

@@ -1,0 +1,407 @@
+# mediacore is a WebRTC SFU: signalling over HTTP and a WebSocket, and all media
+# over a single UDP port that has to reach the pod without passing through a
+# gateway, an HTTPRoute or any other HTTP hop.
+#
+# Two settings decide whether a deployment carries audio at all, and both are
+# below: how UDP reaches the pod (sfu.hostNetwork / sfu.hostPort /
+# sfu.mediaService), and which address the server puts into its ICE candidates
+# (sfu.advertise). Everything else in this file is furniture.
+
+# Nothing publishes a mediacore image. Build it from the Dockerfile at the root
+# of github.com/GlobalArtInc/mediacore and push it somewhere this cluster can
+# pull from; one image carries both binaries, and the chart picks the one each
+# workload needs. There is no default repository on purpose: a plausible one
+# would be somebody else's image.
+image:
+  repository: ""
+  # Empty means the chart's appVersion. A floating tag with pullPolicy Always
+  # restarts the SFU on every rollout, and every restart ends every call.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # Filled in from the release name when empty.
+  name: ""
+  annotations: {}
+
+# The pair that signs and verifies room tokens. The key is an identifier -- the
+# `iss` of every token and the name the SFU looks the secret up under -- and the
+# secret is what actually signs. The front end and the SFU must be given the
+# same pair or the page loads, joining fails, and the SFU logs
+# `rejecting signal connection`.
+auth:
+  apiKey: mediacore
+
+  # No default, and the chart refuses to render a Secret without one:
+  #
+  #   openssl rand -hex 32
+  #
+  # At least 32 characters -- the front end refuses to start below that, so a
+  # shorter one gives you an SFU that runs and a front end that crash-loops.
+  # Keep it to hex or plain letters and digits: it is substituted into a YAML
+  # file at pod start, and a quote or a backslash would corrupt it.
+  apiSecret: ""
+
+  # Bring your own Secret instead (sealed-secrets, external-secrets, a Secret
+  # you made by hand). When set, auth.apiSecret and auth.apiKey are ignored and
+  # no Secret is created by this chart.
+  existingSecret: ""
+  secretKeys:
+    apiKey: api-key
+    apiSecret: api-secret
+
+sfu:
+  enabled: true
+
+  # One. Not a default to be tuned: mediacore is a single node by construction.
+  # Rooms and participants live in the memory of one process, and the two RPCs
+  # that would move a participant between nodes -- ForwardParticipant and
+  # MoveParticipant -- answer `unimplemented` on purpose. Two replicas behind
+  # one Service put half of a room on each and neither half hears the other,
+  # with nothing in any log to say why. The chart refuses to render anything
+  # else. If one process is not enough, run separate releases and decide in
+  # your own application which room lives where.
+  replicaCount: 1
+
+  ports:
+    # Signalling and the room API: /rtc, /rtc/validate, /healthz, /twirp/... and
+    # the generated /swagger page. TCP, and the only part that may go through
+    # the gateway. With hostNetwork this number is also taken on the node.
+    signalling: 7880
+    # All media, on this one UDP port -- not a range. Whatever forwards it to
+    # the pod must not renumber it unless you also state the translated port in
+    # sfu.advertise.addresses.
+    media: 7882
+
+  # How media reaches the pod. Media is UDP and the pod IP is not routable from
+  # a browser, so exactly one of the three mechanisms below has to carry it.
+  # Which one is right depends on the CNI and on what sits in front of the
+  # cluster; there is no answer that is correct everywhere.
+  #
+  #   hostNetwork: true (the default)
+  #     The pod shares the node's network namespace and binds the media port on
+  #     the node itself. Nothing renumbers the port, nothing NATs the address,
+  #     and there is no extra hop -- the shortest path to working media.
+  #     Costs: the pod also occupies sfu.ports.signalling on the node, so a
+  #     second release scheduled onto the same node fails to bind; the pod sees
+  #     every host interface, which a PodSecurity `baseline` or `restricted`
+  #     namespace forbids outright; and cluster DNS only keeps working because
+  #     the chart sets dnsPolicy: ClusterFirstWithHostNet with it.
+  #
+  #   hostPort: true, with hostNetwork: false
+  #     Only the media port is published on the node; the pod keeps an ordinary
+  #     pod IP and an ordinary namespace.
+  #     Costs: hostPort is the CNI's job and CNIs differ. Cilium needs its
+  #     host-port support enabled (it is on with kube-proxy replacement, off in
+  #     some setups); portmap-based CNIs put a NAT in the media path that can
+  #     rewrite the source port and silently break the candidate the browser
+  #     was given. Test it with two real browsers, never with curl.
+  #
+  #   mediaService.enabled: true
+  #     A plain UDP Service in front of the pod.
+  #     Costs: a LoadBalancer needs a provider that actually forwards UDP and
+  #     usually costs money; a NodePort lands on a port in the node-port range,
+  #     which is a different number from sfu.ports.media, and a candidate that
+  #     names the wrong port fails ICE with no error anywhere -- so with
+  #     NodePort you must also set sfu.advertise.addresses to
+  #     ["<node ip>:<node port>"] and turn sfu.advertise.fromNodeIP off.
+  hostNetwork: true
+  hostPort: false
+
+  mediaService:
+    enabled: false
+    type: LoadBalancer
+    # Fixed node port; with type NodePort this is the number clients must be
+    # told about (see sfu.advertise.addresses above).
+    nodePort: null
+    loadBalancerIP: ""
+    # Local keeps the client's address and avoids a second hop between nodes,
+    # both of which matter for media. Cluster spreads UDP over nodes that are
+    # not running the SFU, which is one more translation in the media path.
+    externalTrafficPolicy: Local
+    annotations: {}
+
+  # THE ONE THAT BREAKS AUDIO. What is listed here is written verbatim into the
+  # server's ICE candidates, and it is where every browser sends its microphone.
+  # Get it wrong and nothing looks broken: people join, the participant list is
+  # right, the mute button works, and the room is silent. No error is logged,
+  # because packets addressed to an unreachable address look exactly like
+  # packets a firewall ate. You find it by reading the SFU's own line --
+  # `media transport ready ... advertise=[...]` -- and asking whether a browser
+  # out there can send a UDP packet to that address and port.
+  advertise:
+    # The node's address, read at pod start from the downward API
+    # (status.hostIP) and substituted into the config. Correct for hostNetwork
+    # and for hostPort; wrong as soon as media arrives through something that
+    # changes the address or the port -- a LoadBalancer, a NodePort, NAT in
+    # front of the cluster -- and then you turn this off and state the address.
+    fromNodeIP: true
+
+    # Extra addresses, each becoming one more candidate for clients to try.
+    # "203.0.113.7" keeps sfu.ports.media; "203.0.113.7:31882" states a
+    # different port, which is what a NodePort or a port-translating NAT needs.
+    # Addresses only, never names: ICE candidates carry addresses and the
+    # server rejects a hostname at startup.
+    #
+    # Both may be on at once -- the node's address for clients inside the
+    # network and a public one for everybody else.
+    addresses: []
+
+  # The rest of the server's own config file, in the server's own key names, so
+  # that config-sample.yaml in the mediacore repository reads as documentation
+  # for this block. It is rendered into a ConfigMap and mounted.
+  #
+  # The server rejects any key it does not know and exits, so a typo here would
+  # be a pod that crash-loops with the reason buried in its logs -- values.
+  # schema.json mirrors crates/config/src/lib.rs and turns that into a refusal
+  # from `helm install` naming the key instead.
+  #
+  # Missing on purpose, because the chart owns them and would overwrite
+  # anything you put here: keys (auth above), port and bind_addresses
+  # (sfu.ports.signalling), rtc.udp_port (sfu.ports.media), rtc.bind_address,
+  # rtc.advertise_addresses, rtc.node_ip, rtc.use_socket_address and
+  # rtc.use_external_ip (sfu.advertise), rtc.port_range_start and
+  # rtc.port_range_end (mediacore uses one port, not a range).
+  config:
+    log_level: info
+
+    room:
+      # off means a room has to be created through the room API before anybody
+      # can join it, which is how you keep the SFU to rooms your application
+      # knows about. With it on, walking in creates the room and walking out
+      # ends it.
+      auto_create: true
+      # How long a created room is kept with nobody in it: empty_timeout before
+      # anybody has ever joined, departure_timeout after the last one leaves.
+      # 0 for either means such a room is never collected and only DeleteRoom
+      # is rid of it -- in a process that never restarts, the room list then
+      # grows forever.
+      empty_timeout: 300
+      departure_timeout: 20
+      max_participants: 0
+      # The room ends when fewer than min_humans people remain, end_grace
+      # seconds later; 0 turns the policy off, which is what every room does
+      # today.
+      min_humans: 0
+      end_grace: 90
+      # What happens when an identity already in the room joins again: `suffix`
+      # lets one person be in from a laptop and a phone at once, `displace`
+      # throws the earlier session out, the way LiveKit does.
+      duplicate_identity: suffix
+      sweep_interval_ms: 1000
+
+    rtc:
+      # How long a media transport may sit disconnected before the participant
+      # is dropped, and how long an unanswered offer is held. Both in seconds.
+      ice_disconnected_timeout: 20
+      negotiation_timeout: 15
+
+    video:
+      dynacast_pause_delay_ms: 5000
+      layer_upgrade_hold_ms: 2000
+      # Bandwidth estimation, allocation and pacing. Off until it has been
+      # benched against a constrained link on this deployment; turning it on
+      # gives every subscriber a congestion estimator and a pacer, and hands
+      # the server a budget to spend across that subscriber's video tracks.
+      # config-sample.yaml in the mediacore repository documents the rest.
+      bwe:
+        enabled: false
+
+  service:
+    type: ClusterIP
+    annotations: {}
+
+  # A restart of this workload ends every call in progress -- there is no state
+  # anywhere but this process's memory, and the server tells a client that
+  # reconnects that its session cannot be resumed. A liveness probe is
+  # therefore a loaded gun: a slow node or a paused process for longer than
+  # failureThreshold * periodSeconds hangs up on everyone. It is on because a
+  # wedged SFU is worse, but the numbers are deliberately slack, and turning it
+  # off is a legitimate choice for a small deployment.
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: "1"
+  #     memory: 512Mi
+  #   limits:
+  #     memory: 2Gi
+  # A CPU limit on an SFU is a decision to drop audio under load rather than to
+  # be slow: throttling shows up as choppy sound for everybody in the room.
+
+  # uid 10001 is the `mediacore` user the image creates. It is stated as a
+  # number because the image's USER is a name, and the kubelet cannot verify a
+  # named user against runAsNonRoot -- with runAsNonRoot alone the pod is
+  # refused with "image has non-numeric user (mediacore), cannot verify".
+  podSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    # The rendered config goes to an emptyDir and the binary writes nothing
+    # else, so the image's filesystem can stay read-only.
+    readOnlyRootFilesystem: true
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  # Long enough for a meeting to be told the server is going away; there is no
+  # draining to wait for, because there is nowhere for a session to drain to.
+  terminationGracePeriodSeconds: 30
+  extraEnv: []
+
+front:
+  # The page and the token endpoint. Turn it off to run the SFU behind a front
+  # end of your own; nothing else in the chart depends on it, because the front
+  # end never talks to the SFU -- it signs tokens the SFU verifies later, and
+  # the browser is what connects the two.
+  enabled: true
+  # Stateless, so scale it freely. The limit on the SFU does not apply here.
+  replicaCount: 2
+  port: 8080
+
+  # What the browser is told to open for signalling. Scheme and bare host only:
+  # no path, no trailing slash. The front end appends /rtc itself and refuses
+  # to start otherwise, naming the variable. Empty means wss://<route.host>,
+  # which is the arrangement the route below builds: the page and the WebSocket
+  # on one origin, so the certificate the visitor already accepted covers both.
+  wsUrl: ""
+
+  # The room the bare URL offers and the namespace every other room hangs off:
+  # /r/standup puts a visitor in <room>.standup. The token endpoint is
+  # unauthenticated, so it is confined to this room and its namespace and
+  # cannot mint a token for anything else on the same SFU.
+  room: demo
+
+  service:
+    type: ClusterIP
+    annotations: {}
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources: {}
+
+  podSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 30
+  extraEnv: []
+
+# Publishing, in the house shape: a ListenerSet on the shared gateway plus an
+# HTTPRoute, the same pattern as the `route` chart in this repository. No
+# Ingress: the cluster runs Gateway API behind Envoy Gateway.
+#
+# The page and signalling must be on ONE origin. The front end may only be
+# handed a bare host, and a page served over https may only open wss to a name
+# the browser already trusts; splitting them across two hostnames means the
+# WebSocket is refused with nothing shown to the user and nothing logged on the
+# server. That is why the rules below put /rtc and /twirp on the SFU and
+# everything else on the front end, under the same hostname.
+route:
+  enabled: true
+
+  # Required when enabled. The name visitors type -- no scheme, no path.
+  host: ""
+
+  gateway:
+    name: moscow-gateway
+    namespace: envoy-gateway-system
+
+  tls:
+    # An existing certificate Secret in this namespace. Wildcards are already
+    # issued for the cluster's domains, so this is normally the wildcard's
+    # Secret and nothing new is requested.
+    secretName: ""
+
+    # Only for a host no wildcard covers. Off by default: a second Certificate
+    # for a name that is already certified is a cert-manager order that can
+    # fail, rate-limit, or quietly replace a working Secret.
+    certificate:
+      enabled: false
+      issuer: letsencrypt
+
+    # The gateway lives in another namespace and may not read a Secret in this
+    # one without a grant. Turn it off if your cluster grants the wildcard
+    # Secret to the gateway some other way, or the duplicate is harmless but
+    # noisy.
+    referenceGrant:
+      enabled: true
+      name: ""
+
+  # The generated API page at /swagger, served by the SFU. It carries no token
+  # and leaks nothing, but its Try-it-out buttons act on the real room service
+  # -- DeleteRoom really does hang up on everyone -- so it is off the public
+  # origin by default and reachable with
+  # `kubectl port-forward svc/<release>-mediacore-sfu 7880:7880`.
+  # Note that with this off, /swagger falls through to the front end and
+  # answers 404, which reads exactly like a broken build.
+  swagger: false
+
+  annotations: {}
+
+# Persistence: deliberately absent. mediacore writes nothing to disk today --
+# rooms, participants and every counter live in the process's memory, which is
+# also why a restart ends every call. Session records and call recordings are
+# being designed and will need a volume; when they land, it belongs here, and
+# an empty PVC before then would store nothing while making the SFU harder to
+# schedule.
+#
+# persistence:
+#   enabled: false
+#   existingClaim: ""
+#   storageClass: ""
+#   accessModes:
+#     - ReadWriteOnce
+#   size: 50Gi

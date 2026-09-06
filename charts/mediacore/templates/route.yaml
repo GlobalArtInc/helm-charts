@@ -1,0 +1,127 @@
+{{- if .Values.route.enabled }}
+{{- $tlsSecret := include "mediacore.route.tlsSecretName" . }}
+{{- if .Values.route.tls.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $tlsSecret }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $tlsSecret }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ .Values.route.tls.certificate.issuer }}
+  commonName: {{ .Values.route.host }}
+  dnsNames:
+    - {{ .Values.route.host }}
+---
+{{- end }}
+{{- if .Values.route.tls.referenceGrant.enabled }}
+{{/*
+The gateway runs in its own namespace and may not read a Secret in this one
+without being granted it. Named after the release rather than after the Secret,
+so that two applications sharing one wildcard certificate do not both try to
+create the same object.
+*/}}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ default (printf "%s-tls-read" (include "mediacore.fullname" .)) .Values.route.tls.referenceGrant.name }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: {{ .Values.route.gateway.namespace }}
+  to:
+    - group: ''
+      kind: Secret
+      name: {{ $tlsSecret }}
+---
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: {{ include "mediacore.fullname" . }}-listeners
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+spec:
+  parentRef:
+    name: {{ .Values.route.gateway.name }}
+    namespace: {{ .Values.route.gateway.namespace }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      hostname: {{ .Values.route.host }}
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $tlsSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+{{/*
+One hostname, two backends. The split is not a preference: the front end may
+only be handed a bare host for the WebSocket, and a page served from one origin
+may not open a WebSocket to another without the browser refusing it silently,
+so /rtc has to live under the same name as the page.
+
+Gateway API matches by specificity rather than by order, so the "/" rule below
+does not swallow the SFU's paths whatever order they are written in.
+
+Media is not here and cannot be: it is UDP, and an HTTPRoute carries HTTP.
+*/}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "mediacore.fullname" . }}-route
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "mediacore.fullname" . }}-listeners
+      sectionName: https
+  hostnames:
+    - {{ .Values.route.host }}
+  rules:
+    {{- if .Values.sfu.enabled }}
+    # /rtc is the signalling WebSocket and its validation probe; /twirp is the
+    # room service the backoffice calls with a token it signed itself.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /rtc
+        - path:
+            type: PathPrefix
+            value: /twirp
+        {{- if .Values.route.swagger }}
+        - path:
+            type: PathPrefix
+            value: /swagger
+        {{- end }}
+      backendRefs:
+        - name: {{ include "mediacore.sfu.fullname" . }}
+          port: {{ .Values.sfu.ports.signalling }}
+    {{- end }}
+    {{- if .Values.front.enabled }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "mediacore.front.fullname" . }}
+          port: {{ .Values.front.port }}
+    {{- end }}
+{{- end }}
