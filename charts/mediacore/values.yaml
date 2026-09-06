@@ -365,6 +365,21 @@ route:
     # Secret and nothing new is requested.
     secretName: ""
 
+    # The namespace that Secret lives in, when it is not this release's own.
+    # A cluster wildcard usually lives once, beside cert-manager, and every
+    # listener points at it -- and a certificateRef without a namespace is
+    # resolved in the listener's namespace, so leaving this empty against a
+    # shared certificate gives you a listener that is Accepted and never
+    # Programmed, with `Secret <your namespace>/<name> does not exist` buried in
+    # its status and nothing at all on port 443.
+    #
+    # Cross-namespace reads need a ReferenceGrant in the *secret's* namespace
+    # permitting Gateways from the gateway's namespace to read it. That grant is
+    # not this chart's to make -- it lives with the certificate, is shared by
+    # every listener that points there, and creating it from here would mean
+    # each release claiming authority over a namespace it does not own.
+    secretNamespace: ""
+
     # Only for a host no wildcard covers. Off by default: a second Certificate
     # for a name that is already certified is a cert-manager order that can
     # fail, rate-limit, or quietly replace a working Secret.

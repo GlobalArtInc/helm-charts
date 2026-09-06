@@ -62,6 +62,9 @@ spec:
         certificateRefs:
           - kind: Secret
             name: {{ $tlsSecret }}
+            {{- with .Values.route.tls.secretNamespace }}
+            namespace: {{ . }}
+            {{- end }}
       allowedRoutes:
         namespaces:
           from: Same
