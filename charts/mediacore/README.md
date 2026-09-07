@@ -340,15 +340,23 @@ It also keeps the property `strategy: Recreate` was there for. For one ordinal
 the controller deletes the pod and waits for it to be gone before making the
 next, so two processes never contend for the node's media port.
 
-**Upgrading from 0.3.x replaces the Deployment and leaves its claims behind.**
+**Upgrading from 0.3.x DESTROYS the old volumes. Drain before you do it.**
 The volumes move from standalone PVCs to `volumeClaimTemplates`, which name
 themselves after the ordinal: `records-<release>-mediacore-sfu-0` and
 `recordings-<release>-mediacore-sfu-0`. The old `<release>-mediacore-sfu` and
-`<release>-mediacore-sfu-recordings` are not adopted, not deleted, and not read
--- they are simply orphaned, still holding whatever was on them. Do this while
-nothing is being recorded, check the old claims for unuploaded audio before
-deleting them, and remember that `volumeClaimTemplates` are immutable
-afterwards: changing a size or a class needs the StatefulSet deleted with
+`<release>-mediacore-sfu-recordings` were objects of the release, and this
+version does not declare them any more -- so Helm deletes them, and everything
+on them goes at the same moment the new empty ones are provisioned. Audio that
+had not reached the bucket yet is gone, and there is nothing to recover it from.
+
+So: end the meetings, wait for `unwritten_recordings=0` and for the recording
+directory to be empty, and only then upgrade. If you need the old volumes kept,
+annotate the two claims with `helm.sh/resource-policy: keep` *before* upgrading;
+Helm then leaves them behind for you to copy from and delete by hand.
+
+Claims made by `volumeClaimTemplates` do not have this problem -- Kubernetes
+never deletes them with the StatefulSet -- but they are immutable in exchange:
+changing a size or a class needs the StatefulSet deleted with
 `--cascade=orphan` and recreated around its pods.
 
 ## The server's config
