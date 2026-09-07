@@ -249,6 +249,19 @@ terms: `auth.postgresUrl` when it keeps meetings in a database, and
 `auth.s3AccessKeyId` / `auth.s3SecretAccessKey` when it records. Neither is read
 unless the setting that needs it is on, and neither is ever in the ConfigMap.
 
+**With `auth.existingSecret` the chart cannot check any of this.** It cannot see
+inside a Secret it did not make, so the refusals above do not fire and a Secret
+missing `postgres-url` renders, installs and reports success. What you get is a
+pod that will not start. The env vars are declared `optional`, so the failure is
+the init container saying which Secret and which key rather than a
+`CreateContainerConfigError` with no logs at all — but on a Deployment whose
+strategy is `Recreate`, the old pod is gone by then. Turning either feature on
+against an existing Secret means checking its keys yourself first:
+
+```console
+kubectl -n <ns> get secret <name> -o jsonpath='{.data}' | tr ',' '\n' | cut -d'"' -f2
+```
+
 Anyone holding the secret can mint a token for any room and any identity. It
 reaches the SFU through the environment of an init container and is substituted
 into the config file there — it is never in the ConfigMap, and the rendered file

@@ -92,6 +92,14 @@ The credentials the SFU reads at pod start, as distinct from the settings in
 its ConfigMap. A password in a ConfigMap is a password in `helm get values` and
 in every `kubectl describe` of it, so the database url and the object store's
 keys are here, from the same Secret the signing secret comes from.
+
+`optional: true` on every one of them, and it is not laxness. With
+`auth.existingSecret` the chart cannot see inside the Secret, so the checks in
+`mediacore.validate` cannot run and a missing key gets as far as the pod. A
+required `secretKeyRef` that is missing stops the kubelet before any container
+runs: `CreateContainerConfigError`, no logs, and with this Deployment's
+`Recreate` strategy the old pod is already gone. Optional lets the init
+container start and fail with the sentence naming the Secret and the key.
 */}}
 {{- define "mediacore.sfu.storeEnv" -}}
 {{- if include "mediacore.sfu.inPostgres" . }}
@@ -100,6 +108,7 @@ keys are here, from the same Secret the signing secret comes from.
     secretKeyRef:
       name: {{ include "mediacore.secretName" . }}
       key: {{ .Values.auth.secretKeys.postgresUrl }}
+      optional: true
 {{- end }}
 {{- if include "mediacore.sfu.records" . }}
 - name: MEDIACORE_S3_ACCESS_KEY_ID
@@ -107,11 +116,13 @@ keys are here, from the same Secret the signing secret comes from.
     secretKeyRef:
       name: {{ include "mediacore.secretName" . }}
       key: {{ .Values.auth.secretKeys.s3AccessKeyId }}
+      optional: true
 - name: MEDIACORE_S3_SECRET_ACCESS_KEY
   valueFrom:
     secretKeyRef:
       name: {{ include "mediacore.secretName" . }}
       key: {{ .Values.auth.secretKeys.s3SecretAccessKey }}
+      optional: true
 {{- end }}
 {{- end -}}
 
