@@ -73,4 +73,16 @@ data:
     video:
 {{ toYaml . | indent 6 }}
     {{- end }}
+
+    # The server refuses to start when it cannot open this, and the root
+    # filesystem is read-only, so it has to be the mounted volume. Naming it
+    # here rather than leaving the server's relative default is the whole
+    # difference between a pod that runs and one that crash-loops with
+    # "Read-only file system" -- which is exactly how this was learnt.
+    {{- $sessions := $config.sessions | default dict }}
+    sessions:
+      directory: {{ $sessions.directory | default .Values.persistence.mountPath }}
+      {{- with omit $sessions "directory" }}
+{{ toYaml . | indent 6 }}
+      {{- end }}
 {{- end }}

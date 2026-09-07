@@ -177,6 +177,10 @@ spec:
             - name: config
               mountPath: /run/mediacore
               readOnly: true
+            {{- if .Values.persistence.enabled }}
+            - name: records
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
       volumes:
         - name: config-template
           configMap:
@@ -187,6 +191,15 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi
+        {{- if .Values.persistence.enabled }}
+        # Session records. The server refuses to start without somewhere to
+        # write them, and the root filesystem is read-only on purpose, so this
+        # is not optional furniture -- turning persistence off means telling the
+        # server not to keep records at all.
+        - name: records
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "mediacore.sfu.fullname" .) }}
+        {{- end }}
       {{- with .Values.sfu.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -497,10 +497,37 @@ ingress:
 # an empty PVC before then would store nothing while making the SFU harder to
 # schedule.
 #
-# persistence:
-#   enabled: false
-#   existingClaim: ""
-#   storageClass: ""
-#   accessModes:
-#     - ReadWriteOnce
-#   size: 50Gi
+# Where the SFU keeps its session records: one self-describing JSON file per
+# meeting, which is what makes `find … -mtime +90 -delete` a retention policy
+# rather than a database nobody may touch.
+#
+# This is not optional furniture. The root filesystem is read-only on purpose,
+# and the server refuses to start when it cannot open the directory -- so
+# turning this off means also telling the server to keep no records, by pointing
+# sfu.config.sessions.directory at somewhere writable or by removing the block.
+# A pod that starts and quietly writes its history to a filesystem that vanishes
+# with it would be worse than the refusal.
+persistence:
+  enabled: true
+
+  # Bring your own claim instead; storageClass, accessModes and size are then
+  # unused and no PVC is created.
+  existingClaim: ""
+
+  # Empty takes the cluster's default class, which on a bare-metal cluster is
+  # often local-path -- a volume with no node affinity, whose contents are gone
+  # the first time the pod is rescheduled. Name a real class.
+  storageClass: ""
+
+  accessModes:
+    - ReadWriteOnce
+
+  # Records are small: a six-person meeting is about a kilobyte. This is sized
+  # for years of them plus room for whatever retention lag you actually run.
+  size: 10Gi
+
+  # Must agree with sfu.config.sessions.directory, and the image already creates
+  # this path owned by the uid the pod runs as.
+  mountPath: /var/lib/mediacore/sessions
+
+  annotations: {}
