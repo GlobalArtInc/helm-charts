@@ -19,3 +19,25 @@ spec:
   storageClassName: {{ . }}
   {{- end }}
 {{- end }}
+{{- if and .Values.sfu.enabled .Values.recordings.enabled (not .Values.recordings.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ printf "%s-recordings" (include "mediacore.sfu.fullname" .) }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+  {{- with .Values.recordings.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.recordings.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.recordings.size }}
+  {{- with .Values.recordings.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

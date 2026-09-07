@@ -7,42 +7,96 @@
     "sfu": {
       "type": "object",
       "properties": {
-        "replicaCount": { "type": "integer", "minimum": 0 },
-        "hostNetwork": { "type": "boolean" },
-        "hostPort": { "type": "boolean" },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hostNetwork": {
+          "type": "boolean"
+        },
+        "hostPort": {
+          "type": "boolean"
+        },
         "ports": {
           "type": "object",
           "properties": {
-            "signalling": { "type": "integer", "minimum": 1, "maximum": 65535 },
-            "media": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            "signalling": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "media": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
           }
         },
         "advertise": {
           "type": "object",
           "properties": {
-            "fromNodeIP": { "type": "boolean" },
-            "addresses": { "type": "array", "items": { "type": "string" } }
+            "fromNodeIP": {
+              "type": "boolean"
+            },
+            "addresses": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "config": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "log_level": { "type": "string" },
-            "region": { "type": "string" },
-            "node_id": { "type": "string" },
+            "log_level": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "node_id": {
+              "type": "string"
+            },
             "room": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "auto_create": { "type": "boolean" },
-                "empty_timeout": { "type": "integer", "minimum": 0 },
-                "departure_timeout": { "type": "integer", "minimum": 0 },
-                "max_participants": { "type": "integer", "minimum": 0 },
-                "min_humans": { "type": "integer", "minimum": 0 },
-                "end_grace": { "type": "integer", "minimum": 0 },
-                "duplicate_identity": { "type": "string", "enum": ["suffix", "displace"] },
-                "sweep_interval_ms": { "type": "integer", "minimum": 1 }
+                "auto_create": {
+                  "type": "boolean"
+                },
+                "empty_timeout": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "departure_timeout": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "max_participants": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "min_humans": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end_grace": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "duplicate_identity": {
+                  "type": "string",
+                  "enum": [
+                    "suffix",
+                    "displace"
+                  ]
+                },
+                "sweep_interval_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               }
             },
             "rtc": {
@@ -50,32 +104,171 @@
               "additionalProperties": false,
               "description": "udp_port, bind_address, advertise_addresses, node_ip, use_socket_address, use_external_ip and the port range are owned by the chart and are rejected here: set sfu.ports.media and sfu.advertise instead.",
               "properties": {
-                "ice_disconnected_timeout": { "type": "integer", "minimum": 0 },
-                "negotiation_timeout": { "type": "integer", "minimum": 0 }
+                "ice_disconnected_timeout": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "negotiation_timeout": {
+                  "type": "integer",
+                  "minimum": 0
+                }
               }
             },
             "video": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "dynacast_pause_delay_ms": { "type": "integer", "minimum": 0 },
-                "layer_upgrade_hold_ms": { "type": "integer", "minimum": 0 },
+                "dynacast_pause_delay_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "layer_upgrade_hold_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
                 "bwe": {
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "enabled": { "type": "boolean" },
-                    "initial_kbps": { "type": "integer", "minimum": 1 },
-                    "min_budget_kbps": { "type": "integer", "minimum": 0 },
-                    "max_desired_kbps": { "type": "integer", "minimum": 1 },
-                    "audio_reserve_kbps": { "type": "integer", "minimum": 0 },
-                    "allow_pause": { "type": "boolean" },
-                    "overhead_bytes": { "type": "integer", "minimum": 1 },
-                    "allocation_interval_ms": { "type": "integer", "minimum": 1 },
-                    "recovery_hold_ms": { "type": "integer", "minimum": 0 },
-                    "recovery_step_ms": { "type": "integer", "minimum": 0 },
-                    "queue_pressure_ms": { "type": "integer", "minimum": 0 },
-                    "max_overrun_percent": { "type": "integer", "minimum": 100 }
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "initial_kbps": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "min_budget_kbps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "max_desired_kbps": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "audio_reserve_kbps": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "allow_pause": {
+                      "type": "boolean"
+                    },
+                    "overhead_bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "allocation_interval_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "recovery_hold_ms": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "recovery_step_ms": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "queue_pressure_ms": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "max_overrun_percent": {
+                      "type": "integer",
+                      "minimum": 100
+                    }
+                  }
+                }
+              }
+            },
+            "sessions": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "url is owned by the chart and is rejected here: it carries a password, so it comes from the Secret as auth.postgresUrl.",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "postgres": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "connections": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "timeout_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "attempts": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "lease_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
+              }
+            },
+            "recording": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Present at all and the server can record; absent and it cannot. access_key_id and secret_access_key are owned by the chart and are rejected here: they come from the Secret as auth.s3AccessKeyId and auth.s3SecretAccessKey.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "directory": {
+                  "type": "string"
+                },
+                "queue": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "batch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_segment_mb": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "reorder_hold_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "poll_interval_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "s3": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "path_style": {
+                      "type": "boolean"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "timeout_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
                   }
                 }
               }
@@ -87,31 +280,95 @@
     "front": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "replicaCount": { "type": "integer", "minimum": 0 },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "enabled": {
+          "type": "boolean"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
         "wsUrl": {
           "type": "string",
           "description": "Scheme and bare host only; the front end appends /rtc itself and refuses a url carrying a path.",
           "pattern": "^$|^wss?://[A-Za-z0-9._:\\[\\]-]+$"
         },
-        "room": { "type": "string" }
+        "room": {
+          "type": "string"
+        }
       }
     },
     "image": {
       "type": "object",
       "properties": {
-        "repository": { "type": "string" },
-        "tag": { "type": "string" },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
       }
     },
     "auth": {
       "type": "object",
       "properties": {
-        "apiKey": { "type": "string", "minLength": 1 },
-        "apiSecret": { "type": "string" },
-        "existingSecret": { "type": "string" }
+        "apiKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "apiSecret": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "postgresUrl": {
+          "type": "string"
+        },
+        "s3AccessKeyId": {
+          "type": "string"
+        },
+        "s3SecretAccessKey": {
+          "type": "string"
+        },
+        "secretKeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "apiSecret": {
+              "type": "string",
+              "minLength": 1
+            },
+            "postgresUrl": {
+              "type": "string",
+              "minLength": 1
+            },
+            "s3AccessKeyId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "s3SecretAccessKey": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
       }
     },
     "ingress": {
@@ -119,8 +376,12 @@
       "additionalProperties": false,
       "description": "Publishing on a cluster without Gateway API. additionalProperties is false here for the same reason it is false under sfu.config: the block is one misspelling away from failing silently. An annotations key written annotation would drop the WebSocket timeouts, and a deployment whose calls end after a minute with nothing in any log is not a thing to find out in production.",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
         "host": {
           "type": "string",
           "description": "Bare hostname, no scheme and no path; empty means route.host.",
@@ -134,8 +395,39 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "secretName": { "type": "string" }
+            "secretName": {
+              "type": "string"
+            }
           }
+        }
+      }
+    },
+    "recordings": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "accessModes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "size": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
         }
       }
     }

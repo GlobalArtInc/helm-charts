@@ -242,12 +242,78 @@ so a shorter one gives you an SFU that runs and a front end that crash-loops.
 There is no default secret and the chart will not render a Secret without a
 value somebody chose. Either pass `auth.apiSecret`, or point
 `auth.existingSecret` at a Secret you manage and let `auth.secretKeys` name the
-two keys in it.
+keys in it.
+
+The same Secret carries the two other credentials the SFU may need, on the same
+terms: `auth.postgresUrl` when it keeps meetings in a database, and
+`auth.s3AccessKeyId` / `auth.s3SecretAccessKey` when it records. Neither is read
+unless the setting that needs it is on, and neither is ever in the ConfigMap.
 
 Anyone holding the secret can mint a token for any room and any identity. It
 reaches the SFU through the environment of an init container and is substituted
 into the config file there — it is never in the ConfigMap, and the rendered file
 lives in a memory-backed `emptyDir`.
+
+## Keeping meetings, and recording them
+
+Out of the box the SFU writes one JSON file per meeting to the volume in
+`persistence`, and records nothing. That is the arrangement one process wants,
+and it is the reason `sfu.replicaCount` is refused above one.
+
+A database replaces the directory:
+
+```yaml
+auth:
+  postgresUrl: postgres://mediacore:...@db.example.com:5432/mediacore
+sfu:
+  config:
+    sessions:
+      postgres:
+        enabled: true
+```
+
+The server migrates the schema itself, under an advisory lock, so several
+processes starting at once is safe. The url is not a chart setting -- it carries
+a password -- so it goes in the Secret, like `auth.apiSecret`, and is
+substituted into the config file inside the pod.
+
+Recording needs that database and a bucket. An upload is a row several processes
+claim, which a directory of files cannot be, so the chart refuses the pairing
+rather than letting the server refuse it on the node:
+
+```yaml
+auth:
+  s3AccessKeyId: ...
+  s3SecretAccessKey: ...
+recordings:
+  enabled: true
+  storageClass: csi-rbd-sc
+  size: 50Gi
+sfu:
+  config:
+    recording:
+      # true records every meeting; false still records the rooms that ask for
+      # it themselves, with {"sessionPolicy": {"record": true}} in the metadata
+      # they were created with.
+      enabled: true
+      s3:
+        endpoint: https://storage.example.com
+        region: ru-1
+        bucket: mediacore
+        path_style: true
+```
+
+One Ogg/Opus file per person, written to the `recordings` volume while the
+meeting is happening and put in the bucket under
+`<prefix>/<meeting>/<participant>-<segment>.ogg` when it ends, after which the
+local file is removed. The row in `mediacore_recording` is what a transcription
+service reads: the object key, the account the token named, the offset from the
+start of the meeting, and the length.
+
+That volume is the one whose loss loses something: an `emptyDir` would drop the
+audio of every meeting in progress on any restart, including the rollout that
+caused it. It is separate from `persistence` because it is a different size and
+a different risk -- session records are kilobytes.
 
 ## The server's config
 

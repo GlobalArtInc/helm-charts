@@ -55,6 +55,23 @@ auth:
   secretKeys:
     apiKey: api-key
     apiSecret: api-secret
+    # Read only when the settings that need them are on: the database url when
+    # sfu.config.sessions.postgres.enabled, the object store keys when
+    # sfu.config.recording is set. Both are credentials, so they live in the
+    # Secret and never in values -- which means they need an existingSecret, or
+    # the two fields below.
+    postgresUrl: postgres-url
+    s3AccessKeyId: s3-access-key-id
+    s3SecretAccessKey: s3-secret-access-key
+
+  # The url of the database the SFU keeps its meetings in, with its password in
+  # it: postgres://user:password@host:5432/mediacore. Only used when this chart
+  # makes the Secret; with auth.existingSecret it comes from there.
+  postgresUrl: ""
+
+  # The object store's keys, on the same terms.
+  s3AccessKeyId: ""
+  s3SecretAccessKey: ""
 
 sfu:
   enabled: true
@@ -201,6 +218,37 @@ sfu:
       # is dropped, and how long an unanswered offer is held. Both in seconds.
       ice_disconnected_timeout: 20
       negotiation_timeout: 15
+
+    # Where the record of every meeting is kept. A directory -- persistence
+    # below -- is one process; a database is what more than one process, or any
+    # recording at all, needs. The url itself is never here: it carries a
+    # password, so it comes from the Secret (auth.postgresUrl) and is
+    # substituted into the config at pod start. Everything else postgres takes
+    # -- connections, timeout_ms, attempts, lease_ms -- can be set beside
+    # `enabled` and is passed through.
+    sessions:
+      postgres:
+        enabled: false
+
+    # Recording. Absent -- as it is here -- and the server records nothing and
+    # needs no bucket. Present, and it needs sessions.postgres above, the
+    # recordings volume, and an object store to put finished audio in; the
+    # chart refuses to render without the first two.
+    #
+    #   recording:
+    #     # true records every meeting. false still records the rooms that ask
+    #     # for it themselves, with {"sessionPolicy": {"record": true}} in the
+    #     # metadata they were created with.
+    #     enabled: false
+    #     s3:
+    #       endpoint: https://storage.example.com
+    #       region: us-east-1
+    #       bucket: mediacore
+    #       path_style: true
+    #       prefix: ""
+    #
+    # The keys are not settings and are not written here: they come from the
+    # Secret, as auth.s3AccessKeyId and auth.s3SecretAccessKey.
 
     video:
       dynacast_pause_delay_ms: 5000
@@ -529,5 +577,33 @@ persistence:
   # Must agree with sfu.config.sessions.directory, and the image already creates
   # this path owned by the uid the pod runs as.
   mountPath: /var/lib/mediacore/sessions
+
+  annotations: {}
+
+# The volume audio is recorded to. Separate from the one above because it is a
+# different size and a different risk: session records are kilobytes and can be
+# rebuilt from nothing worse than a gap in a list, while this holds the audio of
+# meetings that are happening right now and recordings the bucket has not taken
+# yet. Turn it on with sfu.config.recording.
+recordings:
+  enabled: false
+
+  existingClaim: ""
+
+  # Empty takes the cluster's default class. Name a real one: local-path gives
+  # a volume with no node affinity, and the first reschedule takes every
+  # recording that had not been uploaded with it.
+  storageClass: ""
+
+  accessModes:
+    - ReadWriteOnce
+
+  # An hour of one person's speech is about 30 MB of Opus. This is a day of a
+  # busy server plus room for a bucket that is unreachable over a weekend.
+  size: 50Gi
+
+  # Must agree with sfu.config.recording.directory, and the image creates this
+  # path owned by the uid the pod runs as.
+  mountPath: /var/lib/mediacore/recordings
 
   annotations: {}

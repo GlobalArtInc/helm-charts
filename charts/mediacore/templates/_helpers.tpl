@@ -74,6 +74,69 @@ to be the same pair or the page loads and joining fails.
 {{- end -}}
 
 {{/*
+Whether the SFU keeps its meetings in a database, and whether it can record.
+Asked in four places -- the config, the init container's checks, its
+environment, and the volume -- and answering them from one expression is what
+keeps a pod that renders from being a pod that cannot start.
+*/}}
+{{- define "mediacore.sfu.inPostgres" -}}
+{{- if (((.Values.sfu.config).sessions).postgres).enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "mediacore.sfu.records" -}}
+{{- if (.Values.sfu.config).recording -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+The credentials the SFU reads at pod start, as distinct from the settings in
+its ConfigMap. A password in a ConfigMap is a password in `helm get values` and
+in every `kubectl describe` of it, so the database url and the object store's
+keys are here, from the same Secret the signing secret comes from.
+*/}}
+{{- define "mediacore.sfu.storeEnv" -}}
+{{- if include "mediacore.sfu.inPostgres" . }}
+- name: MEDIACORE_POSTGRES_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mediacore.secretName" . }}
+      key: {{ .Values.auth.secretKeys.postgresUrl }}
+{{- end }}
+{{- if include "mediacore.sfu.records" . }}
+- name: MEDIACORE_S3_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mediacore.secretName" . }}
+      key: {{ .Values.auth.secretKeys.s3AccessKeyId }}
+- name: MEDIACORE_S3_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mediacore.secretName" . }}
+      key: {{ .Values.auth.secretKeys.s3SecretAccessKey }}
+{{- end }}
+{{- end -}}
+
+{{/*
+The names envsubst is given. It substitutes only what it is told to, and a
+placeholder left out of this list is written into the rendered config verbatim
+-- which the server reads as a url with a `$` in it and refuses, on the node,
+in a crash loop.
+*/}}
+{{- define "mediacore.sfu.substituted" -}}
+{{- $names := list "${MEDIACORE_API_KEY}" "${MEDIACORE_API_SECRET}" -}}
+{{- if .Values.sfu.advertise.fromNodeIP -}}
+{{- $names = append $names "${MEDIACORE_ADVERTISE_IP}" -}}
+{{- end -}}
+{{- if include "mediacore.sfu.inPostgres" . -}}
+{{- $names = append $names "${MEDIACORE_POSTGRES_URL}" -}}
+{{- end -}}
+{{- if include "mediacore.sfu.records" . -}}
+{{- $names = append $names "${MEDIACORE_S3_ACCESS_KEY_ID}" -}}
+{{- $names = append $names "${MEDIACORE_S3_SECRET_ACCESS_KEY}" -}}
+{{- end -}}
+{{- join " " $names -}}
+{{- end -}}
+
+{{/*
 The paths the SFU owns, in one place because they are published twice: by the
 HTTPRoute and, on clusters without Gateway API, by the Ingress. Two lists would
 drift, and the drift is silent -- a /rtc that lands on the front end answers 404
@@ -175,6 +238,27 @@ manifest of its own.
 {{- if not (regexMatch "^[0-9a-fA-F.:\\[\\]]+$" $host) -}}
 {{- fail (printf "sfu.advertise.addresses contains `%s`. ICE candidates carry addresses, never names -- the server rejects a hostname at startup -- so this has to be an ip, or an ip:port when something in front of the pod renumbers the media port." .) -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- if include "mediacore.sfu.inPostgres" . -}}
+{{- if and (not .Values.auth.existingSecret) (not .Values.auth.postgresUrl) -}}
+{{- fail "sfu.config.sessions.postgres.enabled is on and there is nothing to connect with. The url carries a password, so it is not a chart setting: pass it as auth.postgresUrl, or point auth.existingSecret at a Secret holding it under the key auth.secretKeys.postgresUrl." -}}
+{{- end -}}
+{{- end -}}
+
+{{- if include "mediacore.sfu.records" . -}}
+{{- if not (include "mediacore.sfu.inPostgres" .) -}}
+{{- fail "sfu.config.recording is set and sfu.config.sessions.postgres.enabled is not. A recording's upload is a row several processes claim, and a directory of one file per meeting cannot be a queue -- the server refuses to start on this pairing, so the release is refused here instead, before it becomes a crash loop." -}}
+{{- end -}}
+{{- if not .Values.recordings.enabled -}}
+{{- fail "sfu.config.recording is set and recordings.enabled is not. Audio is written to disk for as long as a meeting lasts and uploaded when it ends; the pod's root filesystem is read-only, so without that volume the first recording fails to open its file." -}}
+{{- end -}}
+{{- if and (not .Values.auth.existingSecret) (or (not .Values.auth.s3AccessKeyId) (not .Values.auth.s3SecretAccessKey)) -}}
+{{- fail "sfu.config.recording is set and the object store's keys are missing. Every request to an object store is signed and an unsigned one is refused: pass auth.s3AccessKeyId and auth.s3SecretAccessKey, or point auth.existingSecret at a Secret holding them under the keys in auth.secretKeys." -}}
+{{- end -}}
+{{- if not ((.Values.sfu.config.recording).s3).bucket -}}
+{{- fail "sfu.config.recording is set and sfu.config.recording.s3.bucket is empty. There is nowhere for a finished recording to go, and a server that recorded all day and could upload none of it would only fill its volume." -}}
 {{- end -}}
 {{- end -}}
 

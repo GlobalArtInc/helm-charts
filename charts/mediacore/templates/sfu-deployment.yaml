@@ -93,13 +93,24 @@ spec:
               esac
               {{- end }}
 
+              {{- if include "mediacore.sfu.inPostgres" . }}
+
+              [ -n "${MEDIACORE_POSTGRES_URL:-}" ] || fail "the database url is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.postgresUrl }}, and with sessions.postgres.enabled the server keeps every meeting there"
+              {{- end }}
+              {{- if include "mediacore.sfu.records" . }}
+
+              [ -n "${MEDIACORE_S3_ACCESS_KEY_ID:-}" ] || fail "the object store access key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.s3AccessKeyId }}"
+              [ -n "${MEDIACORE_S3_SECRET_ACCESS_KEY:-}" ] || fail "the object store secret key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.s3SecretAccessKey }}"
+              {{- end }}
+
               umask 077
-              envsubst '${MEDIACORE_API_KEY} ${MEDIACORE_API_SECRET} ${MEDIACORE_ADVERTISE_IP}' \
+              envsubst '{{ include "mediacore.sfu.substituted" . }}' \
                 </etc/mediacore/mediacore.yaml.tmpl >/run/mediacore/mediacore.yaml
 
               echo "mediacore: media will be advertised as {{ if .Values.sfu.advertise.fromNodeIP }}$MEDIACORE_ADVERTISE_IP{{ end }}{{ range .Values.sfu.advertise.addresses }} {{ . }}{{ end }} on udp/{{ .Values.sfu.ports.media }}" >&2
           env:
             {{- include "mediacore.authEnv" . | nindent 12 }}
+            {{- include "mediacore.sfu.storeEnv" . | nindent 12 }}
             {{- if .Values.sfu.advertise.fromNodeIP }}
             # The node's address, which with hostNetwork or a hostPort is
             # exactly where clients send their media.
@@ -181,6 +192,10 @@ spec:
             - name: records
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
+            {{- if .Values.recordings.enabled }}
+            - name: recordings
+              mountPath: {{ .Values.recordings.mountPath }}
+            {{- end }}
       volumes:
         - name: config-template
           configMap:
@@ -199,6 +214,16 @@ spec:
         - name: records
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim | default (include "mediacore.sfu.fullname" .) }}
+        {{- end }}
+        {{- if .Values.recordings.enabled }}
+        # Audio being recorded, and recordings the bucket has not taken yet. A
+        # meeting's audio is written here for as long as the meeting lasts, so
+        # this is the one volume whose loss loses something that cannot be
+        # recovered -- an emptyDir would drop every in-flight recording on any
+        # restart, including the rollout that caused it.
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: {{ .Values.recordings.existingClaim | default (printf "%s-recordings" (include "mediacore.sfu.fullname" .)) }}
         {{- end }}
       {{- with .Values.sfu.nodeSelector }}
       nodeSelector:
