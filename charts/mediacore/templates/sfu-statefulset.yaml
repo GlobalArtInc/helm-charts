@@ -1,6 +1,6 @@
 {{- if .Values.sfu.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "mediacore.sfu.fullname" . }}
   labels:
@@ -8,14 +8,24 @@ metadata:
     app.kubernetes.io/component: sfu
 spec:
   replicas: {{ .Values.sfu.replicaCount }}
-  # Recreate, not a rolling update. On hostNetwork a second pod cannot bind
-  # ports the first one still holds, and even where it could, it would know
-  # nothing about the rooms already running in the old process. The cost is
-  # worth saying out loud: every rollout of this workload -- an image change, a
-  # config change, a node drain -- ends every meeting in progress, and the
-  # clients are told the session cannot be resumed.
-  strategy:
-    type: Recreate
+  # A StatefulSet, not a Deployment, and the volume is the reason. A meeting's
+  # audio is written to disk for as long as the meeting lasts, and only the
+  # process that wrote it can upload it -- the row in the queue names the node.
+  # A Deployment gives every replica the same claim, which a ReadWriteOnce
+  # volume cannot serve twice; here each replica gets a volume of its own that
+  # follows its ordinal, so a pod that comes back finds the recordings it had
+  # not finished uploading.
+  #
+  # The rollout keeps the property Recreate was chosen for: for one ordinal the
+  # controller deletes the pod and waits for it to go before making the next,
+  # so two processes never contend for the node's media port. The cost is the
+  # same and still worth saying out loud -- every rollout of this workload ends
+  # every meeting in progress, and the clients are told the session cannot be
+  # resumed.
+  serviceName: {{ include "mediacore.sfu.fullname" . }}-headless
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       {{- include "mediacore.sfu.selectorLabels" . | nindent 6 }}
@@ -206,24 +216,18 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi
-        {{- if .Values.persistence.enabled }}
-        # Session records. The server refuses to start without somewhere to
-        # write them, and the root filesystem is read-only on purpose, so this
-        # is not optional furniture -- turning persistence off means telling the
-        # server not to keep records at all.
+        {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        # A claim the operator brought. One claim cannot be shared by replicas
+        # of a ReadWriteOnce volume, which is why this is only sensible at one
+        # replica; leave it unset and every replica gets its own.
         - name: records
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default (include "mediacore.sfu.fullname" .) }}
+            claimName: {{ .Values.persistence.existingClaim }}
         {{- end }}
-        {{- if .Values.recordings.enabled }}
-        # Audio being recorded, and recordings the bucket has not taken yet. A
-        # meeting's audio is written here for as long as the meeting lasts, so
-        # this is the one volume whose loss loses something that cannot be
-        # recovered -- an emptyDir would drop every in-flight recording on any
-        # restart, including the rollout that caused it.
+        {{- if and .Values.recordings.enabled .Values.recordings.existingClaim }}
         - name: recordings
           persistentVolumeClaim:
-            claimName: {{ .Values.recordings.existingClaim | default (printf "%s-recordings" (include "mediacore.sfu.fullname" .)) }}
+            claimName: {{ .Values.recordings.existingClaim }}
         {{- end }}
       {{- with .Values.sfu.nodeSelector }}
       nodeSelector:
@@ -237,4 +241,52 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+  # One volume per replica, named after the ordinal that owns it. These are
+  # immutable once the StatefulSet exists: changing a size or a class here is
+  # rejected by the API server, and the way through is to delete the
+  # StatefulSet with --cascade=orphan and let it be recreated around the pods.
+  volumeClaimTemplates:
+    {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+    # Session records. The server refuses to start without somewhere to write
+    # them, and the root filesystem is read-only on purpose, so this is not
+    # optional furniture -- turning persistence off means telling the server not
+    # to keep records at all. A deployment that keeps them in a database instead
+    # still mounts this, unread.
+    - metadata:
+        name: records
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+    {{- end }}
+    {{- if and .Values.recordings.enabled (not .Values.recordings.existingClaim) }}
+    # Audio being recorded, and recordings the bucket has not taken yet. The one
+    # volume whose loss loses something that cannot be recovered, and the reason
+    # this workload is a StatefulSet: an upload can only be done by the process
+    # that holds the file, so the volume has to come back to the same ordinal.
+    - metadata:
+        name: recordings
+        {{- with .Values.recordings.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.recordings.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.recordings.size }}
+        {{- with .Values.recordings.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+    {{- end }}
 {{- end }}

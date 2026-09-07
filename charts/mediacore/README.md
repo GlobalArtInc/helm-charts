@@ -328,6 +328,29 @@ audio of every meeting in progress on any restart, including the rollout that
 caused it. It is separate from `persistence` because it is a different size and
 a different risk -- session records are kilobytes.
 
+### Why the SFU is a StatefulSet
+
+Because only the process that recorded a meeting can upload it: the row in the
+queue names the node the file is on. A Deployment hands every replica the same
+claim, which a ReadWriteOnce volume cannot serve twice; a StatefulSet gives each
+replica a volume that follows its ordinal, so a pod that comes back finds the
+recordings it had not finished uploading.
+
+It also keeps the property `strategy: Recreate` was there for. For one ordinal
+the controller deletes the pod and waits for it to be gone before making the
+next, so two processes never contend for the node's media port.
+
+**Upgrading from 0.3.x replaces the Deployment and leaves its claims behind.**
+The volumes move from standalone PVCs to `volumeClaimTemplates`, which name
+themselves after the ordinal: `records-<release>-mediacore-sfu-0` and
+`recordings-<release>-mediacore-sfu-0`. The old `<release>-mediacore-sfu` and
+`<release>-mediacore-sfu-recordings` are not adopted, not deleted, and not read
+-- they are simply orphaned, still holding whatever was on them. Do this while
+nothing is being recorded, check the old claims for unuploaded audio before
+deleting them, and remember that `volumeClaimTemplates` are immutable
+afterwards: changing a size or a class needs the StatefulSet deleted with
+`--cascade=orphan` and recreated around its pods.
+
 ## The server's config
 
 The SFU reads a YAML file, not a pile of environment variables, so `sfu.config`

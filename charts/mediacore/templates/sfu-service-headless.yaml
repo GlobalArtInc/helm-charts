@@ -1,0 +1,33 @@
+{{- if .Values.sfu.enabled }}
+{{/*
+The StatefulSet's governing Service. It exists so that each replica has a name
+of its own -- <release>-mediacore-sfu-0.<this>.<namespace>.svc -- which is what
+makes a pod's identity survive its restart, and with it the volume that holds
+recordings not yet uploaded.
+
+Headless on purpose: nothing should reach the SFU through a virtual ip. Media
+never comes through a Service at all, and signalling has the Service beside this
+one. clusterIP: None also means this works with hostNetwork, where a pod has no
+address of its own to publish.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}-headless
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+spec:
+  clusterIP: None
+  # A replica that is not ready still has to be addressable: that is how the
+  # StatefulSet controller and anything reconciling recordings find a pod that
+  # is starting, or one whose probe is failing while it drains its upload queue.
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "mediacore.sfu.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: signalling
+      port: {{ .Values.sfu.ports.signalling }}
+      targetPort: signalling
+      protocol: TCP
+{{- end }}
