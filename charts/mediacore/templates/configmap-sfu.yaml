@@ -27,9 +27,13 @@ data:
     {{- with $config.region }}
     region: {{ . | quote }}
     {{- end }}
-    {{- with $config.node_id }}
-    node_id: {{ . | quote }}
-    {{- end }}
+    # The pod's own name, which for a StatefulSet is the ordinal and survives a
+    # restart. This is not decoration: an upload is offered only to the node
+    # whose disk holds the file, so a replica that comes back under a new name
+    # cannot claim the recordings sitting on its own volume, and they are
+    # stranded for good. The server generates a fresh random id when it is not
+    # told one, which is exactly the wrong behaviour here.
+    node_id: {{ $config.node_id | default "${MEDIACORE_NODE_ID}" | quote }}
 
     # The api key is the `iss` of every token and the name the secret is looked
     # up under; the front end signs with the same pair.

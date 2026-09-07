@@ -134,6 +134,9 @@ in a crash loop.
 */}}
 {{- define "mediacore.sfu.substituted" -}}
 {{- $names := list "${MEDIACORE_API_KEY}" "${MEDIACORE_API_SECRET}" -}}
+{{- if not (.Values.sfu.config).node_id -}}
+{{- $names = append $names "${MEDIACORE_NODE_ID}" -}}
+{{- end -}}
 {{- if .Values.sfu.advertise.fromNodeIP -}}
 {{- $names = append $names "${MEDIACORE_ADVERTISE_IP}" -}}
 {{- end -}}

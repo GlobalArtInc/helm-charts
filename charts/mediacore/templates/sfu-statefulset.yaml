@@ -121,6 +121,14 @@ spec:
           env:
             {{- include "mediacore.authEnv" . | nindent 12 }}
             {{- include "mediacore.sfu.storeEnv" . | nindent 12 }}
+            {{- if not (.Values.sfu.config).node_id }}
+            # This replica's name, which is what makes its recordings findable
+            # after a restart. See node_id in the ConfigMap.
+            - name: MEDIACORE_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- end }}
             {{- if .Values.sfu.advertise.fromNodeIP }}
             # The node's address, which with hostNetwork or a hostPort is
             # exactly where clients send their media.

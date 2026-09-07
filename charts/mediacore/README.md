@@ -340,6 +340,20 @@ It also keeps the property `strategy: Recreate` was there for. For one ordinal
 the controller deletes the pod and waits for it to be gone before making the
 next, so two processes never contend for the node's media port.
 
+The volume coming back is only half of it: the replica has to come back under
+the same name as well. An upload is offered only to the node whose disk holds
+the file, and the server invents a fresh random `node_id` on every start unless
+it is told one -- so a restart would leave the recordings sitting on the pod's
+own volume claimed by a node that no longer exists, stranded for good and
+counted in `stuck_recording_work`. The chart therefore sets `node_id` to the
+pod's name, which for a StatefulSet is its ordinal. Set `sfu.config.node_id`
+yourself only if you have something better, and never set it to a value two
+replicas could share.
+
+**The rollout that first takes this identity strands anything already on the
+disk**, because those rows name the old random id. Upgrade with nothing being
+recorded and `stuck_recording_work` at zero.
+
 **Upgrading from 0.3.x DESTROYS the old volumes. Drain before you do it.**
 The volumes move from standalone PVCs to `volumeClaimTemplates`, which name
 themselves after the ordinal: `records-<release>-mediacore-sfu-0` and
