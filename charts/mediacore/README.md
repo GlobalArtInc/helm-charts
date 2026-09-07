@@ -232,6 +232,26 @@ exactly one WebSocket URL and whoever arrived on the other name would get a page
 whose WebSocket the browser refuses in silence. (With `front.enabled: false`
 there is no page and no such URL, so two names are allowed there.)
 
+## Names
+
+Objects are named after the release, with the chart's name appended only when
+the release name does not already contain it. A release called `mediacore` gets
+`mediacore-sfu`, not `mediacore-mediacore-sfu`; a release called `calls` gets
+`calls-mediacore-sfu`.
+
+This is not only tidiness. The SFU's `node_id` is its pod name, and that name is
+written into every session record and every row of the recording queue, so the
+doubled form was visible in the data and in every log line.
+
+**Renaming a release that is already installed replaces every object in it.**
+The StatefulSet, the Services, the ConfigMap and the route are deleted and
+recreated under the new names; the claims made by `volumeClaimTemplates` are not
+Helm's to delete, so they are left behind under the old names holding whatever
+was on them. And because the pod's name changes, so does `node_id`: recordings
+still on the disk are owned by a node that no longer exists. Do this with
+nothing being recorded and `stuck_recording_work` at zero, and clean up the old
+claims by hand afterwards.
+
 ## Secrets
 
 `auth.apiKey` is an identifier — the `iss` of every token and the name the

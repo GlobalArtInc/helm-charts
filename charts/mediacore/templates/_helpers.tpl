@@ -2,11 +2,25 @@
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{/*
+The prefix every object of this release is named after.
+
+A release called `mediacore` installing a chart called `mediacore` would give
+`mediacore-mediacore-sfu-0`, which is the name that ends up in logs, in the
+session records and in the recording queue. So the chart name is not repeated
+when the release name already carries it -- the usual Helm idiom, and worth
+more here than usual because this prefix is also the SFU's node identity.
+*/}}
 {{- define "mediacore.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- printf "%s-%s" .Release.Name (include "mediacore.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- $name := include "mediacore.name" . -}}
+{{- if contains $name .Release.Name -}}
+{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
