@@ -3,9 +3,9 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v2
     appVersion: 1.2.5
-    created: "2026-09-07T00:59:46.991795713Z"
+    created: "2026-09-07T11:04:19.689051238Z"
     description: ISPManager Cert-Manager ACME webhook
-    digest: 44cfb89f599240ea48759d3b80f87e75283b5045ba6638459dcd2302eab378d4
+    digest: 325ea7a4a1ed85771721bdb170a02d060af716d2cb240e44abc48b9f271738e7
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - cert-manager
@@ -146,14 +146,36 @@ entries:
   gitlab-mr-combiner:
   - apiVersion: v1
     appVersion: 1.0.0
-    created: "2026-09-07T00:59:46.992539299Z"
+    created: "2026-09-07T11:04:19.689866469Z"
     description: Gitlab MR Combiner
-    digest: eba03d1c3b098a3a9e363ced40d6c2564e0ec460b804e1884cbb99762dda49da
+    digest: 5772af53558d37ac3455ad4f73319c36e3b7806acf3cdfe1f0b7f531265b8743
     name: gitlab-mr-combiner
     urls:
     - https://GlobalArtInc.github.io/helm-charts/gitlab-mr-combiner-1.0.0.tgz
     version: 1.0.0
   mediacore:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-09-07T11:04:19.691759355Z"
+    description: WebRTC SFU speaking the LiveKit protocol, with its own front end
+    digest: 9fc353adf7357304b58bd19411bc070da7565614b2d60c3f3f5a3cc4236a2f58
+    home: https://github.com/globalartinc/helm-charts
+    keywords:
+    - webrtc
+    - sfu
+    - livekit
+    - media
+    kubeVersion: '>=1.26.0'
+    maintainers:
+    - email: support@globalart.com
+      name: GlobalArt Inc
+    name: mediacore
+    sources:
+    - https://github.com/GlobalArtInc/mediacore
+    type: application
+    urls:
+    - https://GlobalArtInc.github.io/helm-charts/mediacore-0.3.0.tgz
+    version: 0.3.0
   - apiVersion: v2
     appVersion: 0.1.0
     created: "2026-09-07T00:59:46.993837228Z"
@@ -244,9 +266,9 @@ entries:
     version: 0.1.0
   route:
   - apiVersion: v2
-    created: "2026-09-07T00:59:46.993984798Z"
+    created: "2026-09-07T11:04:19.691965967Z"
     description: 'Публикация приложения через шлюз: сертификат, слушатель и маршрут'
-    digest: 64b508e21e2e05e76319560eb20499ac8bcafd0201e41659b21c67f2633681fa
+    digest: 0f9d00260e0f895351bd9da4c28f1fed104698bec3230b41c749f806f76f1cb5
     name: route
     type: application
     urls:
@@ -255,9 +277,9 @@ entries:
   smev4-agent:
   - apiVersion: v2
     appVersion: 3.29.1
-    created: "2026-09-07T00:59:46.99431741Z"
+    created: "2026-09-07T11:04:19.692397289Z"
     description: Helm chart for deploying the SMEV4 (einfahrt) agent wrapped in globalartltd/smev4-agent
-    digest: 76cf1d0db9db2a22ab9a15f25755a0d6bb5e1edb00578ce1b88d5a6d2c5dde47
+    digest: 8269c5bcf635f44096d146fa65627afe433bb41a61a219725dc2140ce3b88f61
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - smev
@@ -272,4 +294,4 @@ entries:
     urls:
     - https://GlobalArtInc.github.io/helm-charts/smev4-agent-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-07T00:59:46.99084506Z"
+generated: "2026-09-07T11:04:19.688435507Z"
