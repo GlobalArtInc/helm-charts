@@ -3,7 +3,7 @@ name: mediacore
 description: WebRTC SFU speaking the LiveKit protocol, with its own front end
 type: application
 # The chart's own semver, not the application's. appVersion follows mediacore.
-version: 0.6.0
+version: 0.7.0
 appVersion: "0.1.0"
 home: https://github.com/globalartinc/helm-charts
 sources:

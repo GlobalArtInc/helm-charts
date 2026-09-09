@@ -261,6 +261,40 @@ sfu:
       bwe:
         enabled: false
 
+    # Data channels, and the chat that stands on them. On in the server by
+    # default, so the block is only worth writing to turn it off or to move the
+    # limits: a client opens its channels the moment it connects, and a server
+    # that takes them and forwards nothing loses messages with nothing in any
+    # log to say so.
+    #
+    # data:
+    #   enabled: true
+    #   max_packet_bytes: 64000
+    #   rate: 60
+    #   burst: 120
+
+    # Who is told what happens as it happens. Nothing is started until a
+    # destination is named -- with no webhook url and no broker there is no
+    # outbox, no task and no cost -- so an absent block is a deployment that
+    # announces nothing and pays nothing for it.
+    #
+    # `directory` is the outbox: what has been promised and not yet taken. It
+    # defaults to an `events` folder on the sessions volume, because the pod's
+    # root filesystem is read-only and an outbox on an emptyDir loses what it
+    # was holding every time the pod moves.
+    #
+    # The Kafka producer is behind a Cargo feature. The image this chart
+    # installs carries it, so naming a broker is enough; a broker named against
+    # a build without it is refused at startup rather than quietly ignored.
+    #
+    # events:
+    #   webhooks:
+    #     urls:
+    #       - https://backoffice.example.com/mediacore/webhook
+    #   kafka:
+    #     brokers: kafka-bootstrap.kafka:9092
+    #     topic: mediacore
+
   service:
     type: ClusterIP
     annotations: {}

@@ -272,6 +272,98 @@
                   }
                 }
               }
+            },
+            "data": {
+              "type": "object",
+              "description": "Data channels, and the chat, reactions and application state that stand on them. On by default in the server: a LiveKit client opens its channels the moment it connects, and a server that receives them and forwards nothing loses messages silently.",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "max_packet_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65536,
+                  "description": "The largest packet forwarded. A data channel carries 64 KiB in one message and this must not exceed it; far below 15 KiB stops livekit-client's text streams while leaving chat working."
+                },
+                "rate": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Packets a second per publisher."
+                },
+                "burst": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many may arrive at once before the rate applies. Must not be under rate."
+                }
+              }
+            },
+            "events": {
+              "type": "object",
+              "description": "Who is told what happens as it happens. Nothing is started until a destination is named: with no webhook url and no broker there is no outbox, no task and no cost. `directory` defaults to an `events` folder on the sessions volume, because the outbox holds what has been promised and not yet taken and the pod's root filesystem is read-only.",
+              "additionalProperties": false,
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "queue": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "timeout_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "backoff_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_backoff_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "webhooks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "api_key": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "kafka": {
+                  "type": "object",
+                  "description": "The producer is behind a Cargo feature. The image this chart installs is built with it on; a broker named against a build without it is refused at startup.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "brokers": {
+                      "type": "string",
+                      "description": "host:port pairs, comma separated. Empty means no broker, which builds no destination at all."
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "properties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Anything else librdkafka takes, passed through unread: security.protocol, sasl.* and the rest of a real broker's connection."
+                    }
+                  }
+                }
+              }
             }
           }
         }
