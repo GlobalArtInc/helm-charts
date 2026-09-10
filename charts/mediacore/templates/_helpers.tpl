@@ -146,6 +146,21 @@ placeholder left out of this list is written into the rendered config verbatim
 -- which the server reads as a url with a `$` in it and refuses, on the node,
 in a crash loop.
 */}}
+{{/*
+How another replica reaches this one.
+
+The headless service gives every pod a name of its own, which is the only
+address that survives a reschedule -- the pod IP does not, and the ordinary
+Service load-balances, which is the one thing a node-to-node address must not
+do. Empty when there is one replica: a lone node registers nothing, which is
+what the server does with this unset.
+*/}}
+{{- define "mediacore.sfu.advertiseUrl" -}}
+{{- if gt (int .Values.sfu.replicaCount) 1 -}}
+ws://${MEDIACORE_NODE_ID}.{{ include "mediacore.sfu.fullname" . }}-headless.{{ .Release.Namespace }}.svc:{{ .Values.sfu.ports.signalling }}
+{{- end -}}
+{{- end -}}
+
 {{- define "mediacore.sfu.substituted" -}}
 {{- $names := list "${MEDIACORE_API_KEY}" "${MEDIACORE_API_SECRET}" -}}
 {{- if not (.Values.sfu.config).node_id -}}
@@ -240,8 +255,16 @@ manifest of its own.
 {{- fail "both sfu.enabled and front.enabled are false, so this release would install nothing." -}}
 {{- end -}}
 
-{{- if and .Values.sfu.enabled (ne (int .Values.sfu.replicaCount) 1) -}}
-{{- fail (printf "sfu.replicaCount is %d. mediacore does not scale horizontally: rooms, participants and every track live in the memory of one process, and the two RPCs that would move a participant between nodes -- ForwardParticipant and MoveParticipant -- answer `unimplemented` on purpose. Two replicas behind one Service put half of a room on each pod; both halves join, both see a participant list, and neither hears the other, with nothing in any log to say why. That is worse than a failed install, so this chart renders one replica or none. If one process is not enough, run separate releases and decide in your own application which room lives where." (int .Values.sfu.replicaCount)) -}}
+{{- if and .Values.sfu.enabled (gt (int .Values.sfu.replicaCount) 1) -}}
+{{- if not (include "mediacore.sfu.inPostgres" .) -}}
+{{- fail (printf "sfu.replicaCount is %d and sessions.postgres is off. Replicas share what they know through that database and through nothing else: without it each pod holds its own rooms, its own meeting records and its own idea of who is up, two clients for one room land on two pods and neither hears the other, and no log anywhere says why. Name a database, or run one replica." (int .Values.sfu.replicaCount)) -}}
+{{- end -}}
+{{- if (.Values.sfu.config).node_id -}}
+{{- fail (printf "sfu.config.node_id is set and sfu.replicaCount is %d, so every pod would come up wearing one name. They would then claim each other's recordings, write each other's meetings and fight over one row in the node table -- the server catches it and refuses to publish, which leaves a cluster that cannot route. Leave it unset: each pod takes its own pod name, which a StatefulSet keeps stable across restarts." (int .Values.sfu.replicaCount)) -}}
+{{- end -}}
+{{- if and .Values.sfu.hostNetwork (not .Values.sfu.affinity) -}}
+{{- fail (printf "sfu.replicaCount is %d with hostNetwork and no sfu.affinity. Two pods scheduled onto one node would both try to bind udp/%d, and the second crash-loops -- or worse, binds and answers for candidates the first advertised. Set a podAntiAffinity on the SFU's own labels so one node carries one replica." (int .Values.sfu.replicaCount) (int .Values.sfu.ports.media)) -}}
+{{- end -}}
 {{- end -}}
 
 {{- if not .Values.auth.existingSecret -}}

@@ -125,6 +125,25 @@ data:
     data:
 {{ toYaml . | indent 6 }}
     {{- end }}
+    {{- $cluster := $config.cluster | default dict }}
+    {{- $advertise := $cluster.advertise_url | default (include "mediacore.sfu.advertiseUrl" .) }}
+    {{- if $advertise }}
+
+    # More than one replica. Each pod publishes what it is holding into the
+    # shared Postgres and reads the others back, and a client that lands on the
+    # wrong pod has its signalling carried to the one holding the room. Media is
+    # not carried: it goes straight to the pod that answered, which is why the
+    # advertised media address still has to be reachable per pod.
+    #
+    # The address is the pod's own name in the headless service. The ordinary
+    # Service load-balances, which is the one thing a node-to-node address must
+    # not do, and a pod IP does not survive a reschedule.
+    cluster:
+      advertise_url: {{ $advertise | quote }}
+      {{- with omit $cluster "advertise_url" }}
+{{ toYaml . | indent 6 }}
+      {{- end }}
+    {{- end }}
     {{- $events := $config.events | default dict }}
     {{- if $events }}
 

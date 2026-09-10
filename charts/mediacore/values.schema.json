@@ -364,6 +364,20 @@
                   }
                 }
               }
+            },
+            "cluster": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "More than one replica, sharing one Postgres. advertise_url is filled in from the pod's headless name when replicaCount is above one; naming it here overrides that.",
+              "properties": {
+                "advertise_url": {
+                  "type": "string"
+                },
+                "lease_seconds": {
+                  "type": "integer",
+                  "minimum": 3
+                }
+              }
             }
           }
         }
