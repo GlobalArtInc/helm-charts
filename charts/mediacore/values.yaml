@@ -76,14 +76,31 @@ auth:
 sfu:
   enabled: true
 
-  # One. Not a default to be tuned: mediacore is a single node by construction.
-  # Rooms and participants live in the memory of one process, and the two RPCs
-  # that would move a participant between nodes -- ForwardParticipant and
-  # MoveParticipant -- answer `unimplemented` on purpose. Two replicas behind
-  # one Service put half of a room on each and neither half hears the other,
-  # with nothing in any log to say why. The chart refuses to render anything
-  # else. If one process is not enough, run separate releases and decide in
-  # your own application which room lives where.
+  # More than one is allowed, and asks three things of the release before it
+  # will render. A room still lives in the memory of one process; what changed
+  # is that the processes tell each other which rooms they hold, and a client
+  # that lands on the wrong one is carried to the right one over its signalling
+  # connection. Media never takes that hop -- the candidates a client is given
+  # are the holding node's.
+  #
+  # The three conditions, each of which is a way to install a cluster that
+  # comes up and does not work:
+  #
+  #   sessions.postgres.enabled must be on. It is where the nodes publish what
+  #   they hold and read the others back; without it every pod is alone and two
+  #   clients for one room land in two different meetings.
+  #
+  #   config.node_id must stay unset. Left alone, each pod takes its own pod
+  #   name, which a StatefulSet keeps stable across restarts. Set here, every
+  #   pod comes up wearing the same name and they fight over one row.
+  #
+  #   With hostNetwork, affinity must keep one pod to a node -- otherwise the
+  #   second one cannot bind the media port, or binds it and answers for
+  #   candidates the first advertised.
+  #
+  # A room stays on the node it opened on for as long as it lives. Nothing
+  # migrates it: a node stopping waits for its rooms to empty, and a node lost
+  # takes its meetings with it.
   replicaCount: 1
 
   ports:
@@ -143,6 +160,47 @@ sfu:
     # not running the SFU, which is one more translation in the media path.
     externalTrafficPolicy: Local
     annotations: {}
+
+  # Prometheus. The SFU answers /metrics on the signalling port, beside
+  # /healthz, and needs nothing switched on in the server to do it. The document
+  # is counts plus this node's own id, version and region -- no room, participant
+  # or track appears in it, by design -- so scraping it needs no token and leaks
+  # no meeting names.
+  #
+  # Both objects below need the Prometheus operator's CRDs. They are off by
+  # default and the templates refuse to render without the CRDs rather than
+  # installing an object nobody reads: a ServiceMonitor accepted by no controller
+  # is a release that succeeds and graphs that stay empty. Helm asks the cluster
+  # what it has, so the refusal is right under helm install and under Flux, and
+  # in the way when rendering offline -- `helm template --api-versions
+  # monitoring.coreos.com/v1` is how you say the target cluster has them.
+  metrics:
+    serviceMonitor:
+      enabled: false
+      # Extra labels. Left empty the operator's own selector decides; set them
+      # when your Prometheus only picks up ServiceMonitors carrying a label.
+      labels: {}
+      # Nothing here needs sampling faster than this. A scrape costs one pass
+      # over the counters plus the two queries /healthz already makes against
+      # the database, so it is not free.
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings: []
+      metricRelabelings: []
+
+    prometheusRule:
+      enabled: false
+      labels: {}
+      # The rules the chart ships, listed in the mediacore README. Every one of
+      # them fires on something that costs data and is invisible in the logs at
+      # default level. Turn this off and use extraRules to write your own.
+      defaultRules: true
+      # How long the cheaper conditions have to hold. The ones with a deadline
+      # of their own -- a store that is away, a writer that died, a node that
+      # will not finish draining -- carry their own and ignore this.
+      for: 10m
+      # Appended to the same group, in the operator's own rule shape.
+      extraRules: []
 
   # THE ONE THAT BREAKS AUDIO. What is listed here is written verbatim into the
   # server's ICE candidates, and it is where every browser sends its microphone.

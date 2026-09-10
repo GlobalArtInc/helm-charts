@@ -1,0 +1,154 @@
+{{- if and .Values.sfu.enabled .Values.sfu.metrics.prometheusRule.enabled }}
+{{- if not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- fail "sfu.metrics.prometheusRule.enabled is on and this cluster has no monitoring.coreos.com/v1. Install the Prometheus operator's CRDs, or leave it off." }}
+{{- end }}
+{{- $for := .Values.sfu.metrics.prometheusRule.for }}
+{{/*
+Alerts on the numbers nothing else reports. Every rule here fires on something
+that costs data and is invisible at default log level: audio thrown away,
+recordings given up on, meetings that will not be in the store tomorrow, events
+nobody will ever be told about. Rules about load -- participants, packet rates,
+cpu -- are deliberately absent: those are dashboards, and a threshold on them
+would be this chart guessing at somebody else's capacity.
+
+`up` is the operator's own series for the ServiceMonitor's targets, so the first
+rule needs no help from the server.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+    {{- with .Values.sfu.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ include "mediacore.sfu.fullname" . }}
+      rules:
+        {{- if .Values.sfu.metrics.prometheusRule.defaultRules }}
+        - alert: MediacoreNodeDown
+          expr: up{job="{{ include "mediacore.sfu.fullname" . }}"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: A mediacore node is not answering its scrape
+            description: >-
+              {{`{{ $labels.instance }}`}} has not answered /metrics for five minutes. If it is
+              also failing its liveness probe the pod is restarting; if it is not, the process is
+              up and something between it and Prometheus is not.
+
+        - alert: MediacoreSessionStoreDown
+          expr: mediacore_session_store_up == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: mediacore cannot reach the meeting store
+            description: >-
+              Calls are carried perfectly well and nothing about them is being recorded.
+              Watch mediacore_unwritten_sessions: what the outage costs is whatever it holds
+              when the process next restarts.
+
+        - alert: MediacoreRecorderStopped
+          expr: mediacore_recorder_enabled == 1 and mediacore_recorder_running == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: mediacore is meant to record and its writer is gone
+            description: >-
+              This node is holding meetings and recording none of them. Nothing restarts the
+              writer thread -- what it had is on the disk for the next start to finish, and the
+              answer is to restart the process.
+
+        - alert: MediacoreDroppingAudio
+          expr: increase(mediacore_dropped_audio_packets_total[10m]) > 0
+          for: {{ $for }}
+          labels:
+            severity: warning
+          annotations:
+            summary: mediacore is throwing recorded audio away
+            description: >-
+              The queue between the media path and the recording writer filled, so the disk is
+              not keeping up with the meetings on top of it. The bound is deliberate -- a wedged
+              disk costs recording and never the calls -- and this is what the bound cost.
+
+        - alert: MediacoreAbandonedRecordings
+          expr: increase(mediacore_abandoned_recordings_total[1h]) > 0
+          for: {{ $for }}
+          labels:
+            severity: warning
+          annotations:
+            summary: mediacore gave up on a recording
+            description: >-
+              Something in a publisher's stream made the writer panic. It cost one recording
+              rather than every recording on the node, which is what it used to cost.
+
+        - alert: MediacoreUnwrittenSessions
+          expr: mediacore_unwritten_sessions > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: mediacore holds meeting records it cannot write
+            description: >-
+              These meetings have been held and will not be there to look up tomorrow. It falls
+              back on its own if a later write of the same record lands, so a store that hiccuped
+              once does not sit here; a number that stays up is a store that cannot keep pace.
+
+        - alert: MediacoreUndeliveredEvents
+          expr: increase(mediacore_undelivered_events_total[30m]) > 0
+          for: {{ $for }}
+          labels:
+            severity: warning
+          annotations:
+            summary: something outside mediacore is missing events
+            description: >-
+              Events given up on after every attempt, or never attempted because that destination
+              was too far behind. Nothing else will ever tell anybody. What they announced is
+              still recorded here, which is the only reason this is a number and not a crash.
+
+        - alert: MediacoreStuckRecordingWork
+          expr: mediacore_stuck_recording_work > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: recording work in the queue that nobody will move
+            description: >-
+              Given up on, or waiting for a node that has not come back. The commonest cause is
+              an upload whose node is gone for good: the file is on a disk nobody has, so no
+              other node can do the work and every node walks past the row for ever.
+
+        - alert: MediacoreClusterNodeLost
+          expr: (mediacore_cluster_nodes - mediacore_cluster_nodes_alive) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: a mediacore node stopped without taking its row away
+            description: >-
+              A row in the node registry has stopped being renewed. Its rooms are gone with it,
+              and the rendezvous hash has handed them to somebody else; the row itself is
+              harmless and will be overwritten if that node comes back under the same name.
+
+        - alert: MediacoreDrainingTooLong
+          expr: mediacore_draining == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: a mediacore node has been draining for half an hour
+            description: >-
+              It stops taking arrivals the moment it is told to drain and then waits for the
+              meetings it holds. Half an hour means a room whose participants are not leaving,
+              and terminationGracePeriodSeconds will end it with SIGKILL when it runs out.
+        {{- end }}
+        {{- with .Values.sfu.metrics.prometheusRule.extraRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

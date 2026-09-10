@@ -1,0 +1,44 @@
+{{- if and .Values.sfu.enabled .Values.sfu.metrics.serviceMonitor.enabled }}
+{{/*
+The SFU answers /metrics on the signalling port, beside /healthz, and needs
+nothing switched on in the server to do it.
+
+Guarded on the CRD as well as on the value: a ServiceMonitor rendered into a
+cluster without the Prometheus operator is accepted by nobody and reported by
+nothing, so the release installs and the graphs stay empty. Failing at
+`helm install` with the reason is the better of the two.
+*/}}
+{{- if not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+{{- fail "sfu.metrics.serviceMonitor.enabled is on and this cluster has no monitoring.coreos.com/v1. Install the Prometheus operator's CRDs, or leave it off and scrape /metrics on the signalling port some other way." }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "mediacore.sfu.fullname" . }}
+  labels:
+    {{- include "mediacore.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sfu
+    {{- with .Values.sfu.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mediacore.sfu.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: signalling
+      path: /metrics
+      interval: {{ .Values.sfu.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.sfu.metrics.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.sfu.metrics.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sfu.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

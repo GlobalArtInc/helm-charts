@@ -415,6 +415,53 @@ mediacore:
 When mediacore gains a setting, add it to `values.schema.json` in the same
 change, or the chart will refuse a key the server now accepts.
 
+## Monitoring
+
+The SFU answers `/metrics` on the signalling port in the Prometheus text format, beside `/healthz`,
+and needs nothing switched on in the server to do it. The document is counts plus the node's own id,
+version and region — no room, participant or track name appears in it — so a scrape needs no token
+and leaks no meeting names.
+
+```yaml
+sfu:
+  metrics:
+    serviceMonitor:
+      enabled: true
+    prometheusRule:
+      enabled: true
+```
+
+Both need the Prometheus operator's CRDs, and both refuse to render without them rather than
+installing an object no controller reads. That refusal is right under `helm install` and under Flux,
+where Helm can ask the cluster what it has; rendering offline, say so yourself with
+`helm template --api-versions monitoring.coreos.com/v1`.
+
+Ten rules ship with `defaultRules`. They are deliberately all of one kind — something that costs
+data and is invisible in the logs at default level:
+
+| Alert | Fires on |
+|---|---|
+| `MediacoreNodeDown` | the scrape target has been silent for five minutes |
+| `MediacoreSessionStoreDown` | calls are carried and nothing about them is recorded |
+| `MediacoreRecorderStopped` | this node is meant to record and its writer thread is gone |
+| `MediacoreDroppingAudio` | the disk is not keeping up, so recorded audio is being thrown away |
+| `MediacoreAbandonedRecordings` | a publisher's stream made the writer give up on one recording |
+| `MediacoreUnwrittenSessions` | meetings held that will not be there to look up tomorrow |
+| `MediacoreUndeliveredEvents` | something outside this server is missing events for good |
+| `MediacoreStuckRecordingWork` | queued recording work no node will ever pick up |
+| `MediacoreClusterNodeLost` | a node stopped without taking its registry row away |
+| `MediacoreDrainingTooLong` | a node has been letting go of its rooms for half an hour |
+
+There is nothing here about participant counts, packet rates or cpu. Those are dashboards: a
+threshold on them would be this chart guessing at your capacity, and a guess that fires is an alert
+people learn to close.
+
+`tests/alerts_test.yaml` unit-tests the rules with `promtool test rules`. Nothing runs it for you.
+Its negative cases are the useful half — a node that was never asked to record, a whole cluster that
+is up, a backlog that came back down, and a failure counter that rose once an hour ago — because
+each of those is a way to write an alert that is always on, and an alert that is always on is one
+nobody reads.
+
 ## Checking it works
 
 ```console

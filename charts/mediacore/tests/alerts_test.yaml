@@ -1,0 +1,126 @@
+# Unit tests for the alert rules this chart ships, in Prometheus' own format.
+#
+# Nothing runs these automatically -- this repository has no test harness and
+# this file is not worth inventing one for. Run them by hand when the rules
+# change, or when mediacore renames a series:
+#
+#   helm template t . --api-versions monitoring.coreos.com/v1 \
+#     --set sfu.metrics.prometheusRule.enabled=true ... \
+#     | yq 'select(.kind == "PrometheusRule") | {"groups": .spec.groups}' > rules.yaml
+#   promtool test rules tests/alerts_test.yaml
+#
+# The negative cases are the point. An alert that fires is easy to write; the
+# ones here exist because each was a way to get an alert that is always on, and
+# an alert that is always on is one nobody reads.
+rule_files:
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # The writer thread died on a node that is meant to record.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_recorder_enabled'
+        values: '1x10'
+      - series: 'mediacore_recorder_running'
+        values: '1 1 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MediacoreRecorderStopped
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: MediacoreRecorderStopped
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: mediacore is meant to record and its writer is gone
+              description: >-
+                This node is holding meetings and recording none of them. Nothing restarts the writer thread -- what it had is on the disk for the next start to finish, and the answer is to restart the process.
+
+  # A node that records and is running must never fire it.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_recorder_enabled'
+        values: '1x10'
+      - series: 'mediacore_recorder_running'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MediacoreRecorderStopped
+        exp_alerts: []
+
+  # A node that was never asked to record is not a node whose recorder died.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_recorder_enabled'
+        values: '0x10'
+      - series: 'mediacore_recorder_running'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: MediacoreRecorderStopped
+        exp_alerts: []
+
+  # Undelivered events: the counter rose once, long ago, and stopped.
+  # This is the case a `> 0` gauge alert would hold on for ever.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_undelivered_events_total'
+        values: '0 0 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MediacoreUndeliveredEvents
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: something outside mediacore is missing events
+              description: >-
+                Events given up on after every attempt, or never attempted because that destination was too far behind. Nothing else will ever tell anybody. What they announced is still recorded here, which is the only reason this is a number and not a crash.
+      # An hour and a half later the same standing value must be quiet again.
+      - eval_time: 90m
+        alertname: MediacoreUndeliveredEvents
+        exp_alerts: []
+
+  # A node that stopped without taking its registry row away.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_cluster_nodes'
+        values: '3x20'
+      - series: 'mediacore_cluster_nodes_alive'
+        values: '3 3 3 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: MediacoreClusterNodeLost
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: MediacoreClusterNodeLost
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: a mediacore node stopped without taking its row away
+              description: >-
+                A row in the node registry has stopped being renewed. Its rooms are gone with it, and the rendezvous hash has handed them to somebody else; the row itself is harmless and will be overwritten if that node comes back under the same name.
+
+  # A whole cluster that is up must never fire it.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_cluster_nodes'
+        values: '3x20'
+      - series: 'mediacore_cluster_nodes_alive'
+        values: '3x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MediacoreClusterNodeLost
+        exp_alerts: []
+
+  # Unwritten sessions that come back down are a store that hiccuped, not one
+  # that cannot keep pace.
+  - interval: 1m
+    input_series:
+      - series: 'mediacore_unwritten_sessions'
+        values: '0 0 4 4 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MediacoreUnwrittenSessions
+        exp_alerts: []

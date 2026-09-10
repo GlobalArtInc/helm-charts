@@ -380,6 +380,54 @@
               }
             }
           }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "serviceMonitor": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "interval": {
+                  "type": "string"
+                },
+                "scrapeTimeout": {
+                  "type": "string"
+                },
+                "relabelings": {
+                  "type": "array"
+                },
+                "metricRelabelings": {
+                  "type": "array"
+                }
+              }
+            },
+            "prometheusRule": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "defaultRules": {
+                  "type": "boolean"
+                },
+                "for": {
+                  "type": "string"
+                },
+                "extraRules": {
+                  "type": "array"
+                }
+              }
+            }
+          }
         }
       }
     },
