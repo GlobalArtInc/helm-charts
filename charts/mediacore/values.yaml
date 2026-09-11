@@ -63,6 +63,7 @@ auth:
     postgresUrl: postgres-url
     s3AccessKeyId: s3-access-key-id
     s3SecretAccessKey: s3-secret-access-key
+    turnSecret: turn-secret
 
   # The url of the database the SFU keeps its meetings in, with its password in
   # it: postgres://user:password@host:5432/mediacore. Only used when this chart
@@ -72,6 +73,16 @@ auth:
   # The object store's keys, on the same terms.
   s3AccessKeyId: ""
   s3SecretAccessKey: ""
+
+  # The TURN relay's shared secret -- coturn's `static-auth-secret`, byte for
+  # byte. Only the SFU gets it: it mints a credential per person as they join,
+  # out of a secret no client ever sees.
+  #
+  # Refer to it from sfu.config.rtc.ice_servers as `${MEDIACORE_TURN_SECRET}`.
+  # The server fills that in as it reads its config, so the ConfigMap holds those
+  # characters and never the secret. Leave this empty and set nothing in
+  # ice_servers, and no relay is offered to anybody.
+  turnSecret: ""
 
 sfu:
   enabled: true
@@ -136,6 +147,19 @@ sfu:
   #     some setups); portmap-based CNIs put a NAT in the media path that can
   #     rewrite the source port and silently break the candidate the browser
   #     was given. Test it with two real browsers, never with curl.
+  #
+  #     CHECK BEFORE YOU CHOOSE IT, because nobody implements hostPort by
+  #     default and nothing reports its absence -- the pod schedules, the port
+  #     appears in its spec, and no packet ever arrives:
+  #
+  #       kubectl -n kube-system get cm cilium-config \
+  #         -o jsonpath='{.data.kube-proxy-replacement}'
+  #       kubectl -n kube-system exec ds/cilium -c cilium-agent -- \
+  #         cat /host/etc/cni/net.d/*.conflist
+  #
+  #     With kube-proxy-replacement false and no `portmap` in the plugin chain,
+  #     there is nobody to publish the port. A cluster in that state was what
+  #     prompted this paragraph.
   #
   #   mediaService.enabled: true
   #     A plain UDP Service in front of the pod.

@@ -415,6 +415,59 @@ mediacore:
 When mediacore gains a setting, add it to `values.schema.json` in the same
 change, or the chart will refuse a key the server now accepts.
 
+## Offering clients a relay
+
+A client whose network will not carry UDP to the media port reaches this server through
+a TURN relay or not at all, and without one it fails in the worst way available: it
+joins, the roster is right, the mute button works, and the room is silent. This server
+runs no relay of its own -- it is ice-lite, so a relayed packet is one more source
+address and nothing on the media path changes -- but it has to tell clients where one
+is, and nothing else does that for it.
+
+```yaml
+auth:
+  # coturn's static-auth-secret, byte for byte.
+  turnSecret: <the same secret coturn was started with>
+sfu:
+  config:
+    rtc:
+      ice_servers:
+        - urls:
+            - turns:turn.example.com:443?transport=tcp
+            - turn:turn.example.com:3478?transport=udp
+          secret: ${MEDIACORE_TURN_SECRET}
+          ttl_seconds: 86400
+```
+
+The secret is written as a variable and stays one. It reaches the ConfigMap as those
+sixteen characters and never as its value; the server fills it in as it reads its own
+config, out of an environment variable this chart takes from the Secret. A password in a
+ConfigMap is a password in `helm get values` and in every `kubectl describe` of it.
+
+With `secret`, the server mints a credential for each person as they join -- coturn's
+`use-auth-secret` mode, the username carrying the expiry and the identity -- so coturn's
+own logs and per-user limits name who holds an allocation, and a leaked credential is
+bandwidth through one relay under one name until it expires. `username` and `credential`
+instead are a fixed pair from coturn's user database: simpler, and a password that every
+client that ever joins is handed.
+
+Two things that fail as silence, both worth reading twice:
+
+**The relay has to reach the address this server advertises.** coturn opens a socket
+towards whatever is in the ICE candidates, on the client's behalf. A relay outside the
+cluster while `sfu.advertise` names a node address gives a call that connects, an
+allocation that succeeds, and a room where nobody hears anybody -- indistinguishable
+from everyone being muted, and strictly worse than offering no relay at all.
+
+**`turn:3478/udp` alone does not cure the case you built it for.** A network that drops
+UDP to the media port usually drops UDP to 3478 as well; what reaches those people is
+`turns:` on 443, which looks like ordinary HTTPS. Offer both -- a client that can go
+direct never uses either, because host candidates outrank relay ones.
+
+`ttl_seconds` has to outlive the longest call rather than the join: coturn checks the
+expiry when the allocation is made and again on every refresh, so a short one takes the
+relay away mid-sentence.
+
 ## Monitoring
 
 The SFU answers `/metrics` on the signalling port in the Prometheus text format, beside `/healthz`,

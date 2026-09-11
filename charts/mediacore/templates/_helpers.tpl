@@ -88,6 +88,35 @@ to be the same pair or the page loads and joining fails.
 {{- end -}}
 
 {{/*
+The TURN relay's shared secret, for the SFU only: it mints a credential per
+person as they join and the front end has no use for one.
+
+It goes to the container that READS the config rather than the one that renders
+it, because the server fills this variable in itself. Written as
+`${MEDIACORE_TURN_SECRET}` in sfu.config.rtc.ice_servers, it reaches the
+ConfigMap as those characters and never as the secret -- which is the whole
+reason it is done this way round and not with envsubst, whose output would be a
+file with the secret in it.
+
+`optional: true`, so a deployment that configures no relay is not asked for a
+key that does not exist. An `ice_servers` entry naming the variable while the
+Secret does not carry it is then a startup refusal from the server, by name,
+which is the error worth having.
+*/}}
+{{- define "mediacore.sfu.turnEnv" -}}
+{{- if (.Values.sfu.config).rtc }}
+{{- if (.Values.sfu.config).rtc.ice_servers }}
+- name: MEDIACORE_TURN_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mediacore.secretName" . }}
+      key: {{ .Values.auth.secretKeys.turnSecret }}
+      optional: true
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Whether the SFU keeps its meetings in a database, and whether it can record.
 Asked in four places -- the config, the init container's checks, its
 environment, and the volume -- and answering them from one expression is what
