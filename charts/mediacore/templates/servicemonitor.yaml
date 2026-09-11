@@ -25,6 +25,12 @@ spec:
   selector:
     matchLabels:
       {{- include "mediacore.sfu.selectorLabels" . | nindent 6 }}
+    # Not the headless Service. It fronts the same pod on the same port and
+    # carries the same labels, so without this the node is scraped twice and
+    # every alert arrives in duplicate.
+    matchExpressions:
+      - key: mediacore.globalart.hu/headless
+        operator: DoesNotExist
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}

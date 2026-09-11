@@ -17,6 +17,12 @@ metadata:
   labels:
     {{- include "mediacore.labels" . | nindent 4 }}
     app.kubernetes.io/component: sfu
+    # The one label that tells this Service from the ordinary one, which carries
+    # exactly the same set otherwise. The ServiceMonitor selects on its absence:
+    # both Services front the same pod on the same port, so a monitor that
+    # matched both would scrape every node twice and fire every alert twice, one
+    # copy per Service, with nothing but a `service` label to tell them apart.
+    mediacore.globalart.hu/headless: "true"
 spec:
   clusterIP: None
   # A replica that is not ready still has to be addressable: that is how the
