@@ -157,7 +157,9 @@ spec:
           env:
             - name: MEDIACORE_CONFIG
               value: /run/mediacore/mediacore.yaml
-            {{- include "mediacore.sfu.turnEnv" . | nindent 12 }}
+            {{- with include "mediacore.sfu.turnEnv" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.sfu.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
