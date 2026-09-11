@@ -19,7 +19,7 @@ data:
   # written with deny_unknown_fields: one key it does not know and the process
   # exits at startup, so values.schema.json mirrors it and helm refuses a typo
   # before it becomes a crash-looping pod.
-  mediacore.yaml.tmpl: |
+  mediacore.yaml: |
     port: {{ .Values.sfu.ports.signalling }}
     bind_addresses:
       - 0.0.0.0

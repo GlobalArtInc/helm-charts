@@ -64,89 +64,55 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
-        # The server reads a YAML file and expands nothing in it, so the two
-        # values that only exist at run time are substituted here: the signing
-        # secret, which comes from a Secret and must not sit in a ConfigMap,
-        # and the node's own address, which the downward API supplies. envsubst
-        # is in the image already -- mediacore's own Dockerfile installs
-        # gettext-base for deploy/start-sfu.sh, which does exactly this.
+        # The image's own binary, not a shell. It used to be `/bin/sh -c` with
+        # envsubst, and that shell was the last thing keeping the published image
+        # on Debian: the server renders its own config now, so all that is left
+        # here is saying whether this deployment is configured -- and a binary
+        # can say it.
         #
-        # The checks below are the ones worth failing on. Each of them produces
-        # a deployment that starts, signals, and carries no audio, and a pod
-        # that refuses to start with a line in its log is far easier to
-        # diagnose than a room where everybody is silent.
-        - name: render-config
+        # What it checks is what only a deployment knows. The server is right to
+        # accept an empty database url (meetings go in a directory), a loopback
+        # advertise address (that is what the local compose stack states) and no
+        # bucket (a deployment that records nothing). Under Kubernetes each of
+        # those is instead a Secret that arrived empty, and the first is the
+        # worst: every meeting record would move onto a directory that may not
+        # even be a volume, silently.
+        #
+        # It reads the same ConfigMap at the same path with the same environment
+        # as the server. Anything else and the check passes on a file the server
+        # then refuses, which is the one failure a check must not have.
+        - name: check-config
           image: {{ include "mediacore.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -eu
-              fail() {
-                echo "mediacore: $1" >&2
-                exit 1
-              }
-
-              [ -n "${MEDIACORE_API_KEY:-}" ] || fail "the api key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.apiKey }}"
-              [ -n "${MEDIACORE_API_SECRET:-}" ] || fail "the api secret is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.apiSecret }}"
-              if [ "${#MEDIACORE_API_SECRET}" -lt 32 ]; then
-                fail "the api secret is shorter than 32 characters; the front end refuses to start below that, and the two halves would disagree about which tokens are valid"
-              fi
-              {{- if .Values.sfu.advertise.fromNodeIP }}
-
-              [ -n "${MEDIACORE_ADVERTISE_IP:-}" ] || fail "status.hostIP came through empty, so there is no node address to advertise"
-              case "$MEDIACORE_ADVERTISE_IP" in
-                0.0.0.0|::|127.*|::1)
-                  fail "the node address is $MEDIACORE_ADVERTISE_IP, which no client outside this node can send media to"
-                  ;;
-              esac
-              {{- end }}
-
-              {{- if include "mediacore.sfu.inPostgres" . }}
-
-              [ -n "${MEDIACORE_POSTGRES_URL:-}" ] || fail "the database url is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.postgresUrl }}, and with sessions.postgres.enabled the server keeps every meeting there"
-              {{- end }}
-              {{- if include "mediacore.sfu.records" . }}
-
-              [ -n "${MEDIACORE_S3_ACCESS_KEY_ID:-}" ] || fail "the object store access key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.s3AccessKeyId }}"
-              [ -n "${MEDIACORE_S3_SECRET_ACCESS_KEY:-}" ] || fail "the object store secret key is empty; it is read from secret {{ include "mediacore.secretName" . }} key {{ .Values.auth.secretKeys.s3SecretAccessKey }}"
-              {{- end }}
-
-              umask 077
-              envsubst '{{ include "mediacore.sfu.substituted" . }}' \
-                </etc/mediacore/mediacore.yaml.tmpl >/run/mediacore/mediacore.yaml
-
-              echo "mediacore: media will be advertised as {{ if .Values.sfu.advertise.fromNodeIP }}$MEDIACORE_ADVERTISE_IP{{ end }}{{ range .Values.sfu.advertise.addresses }} {{ . }}{{ end }} on udp/{{ .Values.sfu.ports.media }}" >&2
-          env:
-            {{- include "mediacore.authEnv" . | nindent 12 }}
-            {{- include "mediacore.sfu.storeEnv" . | nindent 12 }}
-            {{- if not (.Values.sfu.config).node_id }}
-            # This replica's name, which is what makes its recordings findable
-            # after a restart. See node_id in the ConfigMap.
-            - name: MEDIACORE_NODE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+          command: ["/usr/local/bin/mediacore"]
+          args:
+            - --config
+            - /etc/mediacore/mediacore.yaml
+            - check
+            {{- if or (include "mediacore.sfu.inPostgres" .) (include "mediacore.sfu.records" .) }}
+            # Recording needs the database as much as sessions.postgres does: the
+            # queue that carries a finished recording to the bucket lives there.
+            - --expect-postgres
+            {{- end }}
+            {{- if include "mediacore.sfu.records" . }}
+            - --expect-recording
             {{- end }}
             {{- if .Values.sfu.advertise.fromNodeIP }}
-            # The node's address, which with hostNetwork or a hostPort is
-            # exactly where clients send their media.
-            - name: MEDIACORE_ADVERTISE_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
+            # Only when the address comes from the downward API. An operator who
+            # states addresses by hand in sfu.advertise.addresses may well mean a
+            # private one, and this is not the place to argue with them.
+            - --routable-advertise
             {{- end }}
+          env:
+            {{- include "mediacore.sfu.configEnv" . | nindent 12 }}
           {{- with .Values.sfu.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            - name: config-template
+            - name: config
               mountPath: /etc/mediacore
               readOnly: true
-            - name: config
-              mountPath: /run/mediacore
       containers:
         - name: sfu
           image: {{ include "mediacore.image" . }}
@@ -156,10 +122,8 @@ spec:
           # entrypoint stays whatever the image ships.
           env:
             - name: MEDIACORE_CONFIG
-              value: /run/mediacore/mediacore.yaml
-            {{- with include "mediacore.sfu.turnEnv" . }}
-            {{- . | nindent 12 }}
-            {{- end }}
+              value: /etc/mediacore/mediacore.yaml
+            {{- include "mediacore.sfu.configEnv" . | nindent 12 }}
             {{- with .Values.sfu.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -207,7 +171,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /run/mediacore
+              mountPath: /etc/mediacore
               readOnly: true
             {{- if .Values.persistence.enabled }}
             - name: records
@@ -218,15 +182,14 @@ spec:
               mountPath: {{ .Values.recordings.mountPath }}
             {{- end }}
       volumes:
-        - name: config-template
+        # The ConfigMap itself, read-only, and nothing else. There used to be a
+        # memory-backed scratch volume beside it for the init container to render
+        # into, because the rendered file carried the token-signing secret. The
+        # server fills its own variables in now, so the secret never reaches a
+        # file and there is nothing to render into.
+        - name: config
           configMap:
             name: {{ include "mediacore.sfu.fullname" . }}
-        # Memory-backed: the rendered file carries the token-signing secret and
-        # has no business on a node's disk.
-        - name: config
-          emptyDir:
-            medium: Memory
-            sizeLimit: 1Mi
         {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
         # A claim the operator brought. One claim cannot be shared by replicas
         # of a ReadWriteOnce volume, which is why this is only sensible at one

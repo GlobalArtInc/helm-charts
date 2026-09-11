@@ -103,6 +103,37 @@ key that does not exist. An `ice_servers` entry naming the variable while the
 Secret does not carry it is then a startup refusal from the server, by name,
 which is the error worth having.
 */}}
+{{/*
+Everything the config names as `${MEDIACORE_*}`, for the containers that read it.
+
+Both of them read it: the init container to say whether this deployment is
+configured, and the server to run. They must be given the same names or the
+check passes on a file the server then refuses -- which is the one failure a
+check is supposed to make impossible.
+
+The values stay variables. The ConfigMap holds `${MEDIACORE_API_SECRET}` as
+those characters and the server fills it in as it reads, so the signing secret is
+never written to a file at all -- not even a memory-backed one, which is what the
+init container used to render into.
+*/}}
+{{- define "mediacore.sfu.configEnv" -}}
+{{- include "mediacore.authEnv" . }}
+{{- include "mediacore.sfu.storeEnv" . }}
+{{- include "mediacore.sfu.turnEnv" . }}
+{{- if not (.Values.sfu.config).node_id }}
+- name: MEDIACORE_NODE_ID
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+{{- end }}
+{{- if .Values.sfu.advertise.fromNodeIP }}
+- name: MEDIACORE_ADVERTISE_IP
+  valueFrom:
+    fieldRef:
+      fieldPath: status.hostIP
+{{- end }}
+{{- end -}}
+
 {{- define "mediacore.sfu.turnEnv" -}}
 {{- if (.Values.sfu.config).rtc }}
 {{- if (.Values.sfu.config).rtc.ice_servers }}
