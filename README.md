@@ -5,6 +5,7 @@
 This repository contains [Helm](https://helm.sh) charts for various projects
 
 * [CertManager Webhook ISP Manager](https://github.com/GlobalArtInc/cert-manager-webhook-ispmanager)
+* [Conductor OSS](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/conductor)
 * [Gitlab MR Combiner](https://github.com/GlobalArtInc/gitlab-mr-combiner)
 * [MediaCore (WebRTC SFU)](https://github.com/GlobalArtInc/mediacore)
 * [SMEV4 Agent](https://github.com/GlobalArtInc/smev4-agent)

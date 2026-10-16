@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "conductor.fullname" . }}
+  labels:
+    {{- include "conductor.labels" . | nindent 4 }}
+data:
+  config.properties: |
+    conductor.grpc-server.enabled=false
+    conductor.db.type=postgres
+    conductor.queue.type=postgres
+    spring.datasource.url=jdbc:postgresql://{{ .Values.postgres.host }}:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}
+    spring.datasource.username={{ .Values.postgres.username }}
+    spring.datasource.hikari.maximum-pool-size={{ .Values.postgres.pool.maximumPoolSize }}
+    spring.datasource.hikari.minimum-idle={{ .Values.postgres.pool.minimumIdle }}
+    {{- if .Values.elasticsearch.enabled }}
+    conductor.indexing.enabled=true
+    conductor.indexing.type=elasticsearch
+    conductor.elasticsearch.version=7
+    conductor.elasticsearch.url={{ .Values.elasticsearch.url }}
+    conductor.elasticsearch.indexName={{ .Values.elasticsearch.indexName }}
+    conductor.elasticsearch.clusterHealthColor={{ .Values.elasticsearch.clusterHealthColor }}
+    {{- if not (kindIs "invalid" .Values.elasticsearch.indexReplicasCount) }}
+    conductor.elasticsearch.indexReplicasCount={{ .Values.elasticsearch.indexReplicasCount }}
+    {{- end }}
+    {{- with .Values.elasticsearch.username }}
+    conductor.elasticsearch.username={{ . }}
+    {{- end }}
+    {{- else }}
+    conductor.indexing.enabled=false
+    {{- end }}
+    {{- if eq .Values.lock.type "redis" }}
+    conductor.workflow-execution-lock.type=redis
+    conductor.app.workflowExecutionLockEnabled=true
+    conductor.redis-lock.serverAddress={{ .Values.lock.redis.address }}
+    {{- else if eq .Values.lock.type "local_only" }}
+    conductor.workflow-execution-lock.type=local_only
+    conductor.app.workflowExecutionLockEnabled=true
+    {{- end }}
+    {{- if .Values.metrics.enabled }}
+    conductor.metrics-prometheus.enabled=true
+    {{- end }}
+    {{- range $key, $value := .Values.config.extra }}
+    {{ $key }}={{ $value }}
+    {{- end }}

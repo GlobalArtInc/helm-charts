@@ -1,0 +1,124 @@
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: conductoross/conductor
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+javaOpts: ""
+extraEnv: []
+
+postgres:
+  host: ""
+  port: 5432
+  database: conductor
+  username: conductor
+  password: ""
+  existingSecret: ""
+  existingSecretKey: password
+  pool:
+    maximumPoolSize: 10
+    minimumIdle: 2
+
+elasticsearch:
+  enabled: true
+  url: ""
+  indexName: conductor
+  clusterHealthColor: yellow
+  indexReplicasCount: null
+  username: ""
+  password: ""
+  existingSecret: ""
+  existingSecretKey: password
+
+lock:
+  type: none
+  redis:
+    address: ""
+
+config:
+  extra: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+route:
+  enabled: false
+  host: ""
+  gateway:
+    name: moscow-gateway
+    namespace: envoy-gateway-system
+    sectionName: ""
+  listenerSet:
+    enabled: true
+  tls:
+    secretName: ""
+    secretNamespace: ""
+    certificate:
+      enabled: false
+      issuer: letsencrypt
+    referenceGrant:
+      enabled: true
+      name: ""
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+  tls:
+    secretName: ""
+
+metrics:
+  enabled: false
+  path: /actuator/prometheus
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+probes:
+  path: /health
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 1500Mi
+  limits:
+    cpu: 2000m
+    memory: 2500Mi
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+
+pdb:
+  enabled: false
+  minAvailable: 1

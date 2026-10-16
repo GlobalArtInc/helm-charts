@@ -1,0 +1,19 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as {{ .Release.Name }}.
+
+The UI and the API are on one port, {{ .Values.service.port }}. Conductor OSS has no authentication of its own: anyone who can reach that port can read, start and terminate workflows. {{ if or .Values.route.enabled .Values.ingress.enabled }}Whatever publishes it below is the only gate there is.{{ else }}Nothing publishes it from this release.{{ end }}
+{{- if .Values.route.enabled }}
+
+Gateway API: https://{{ .Values.route.host }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+
+Ingress: https://{{ include "conductor.ingress.host" . }}
+{{- end }}
+
+Workers in this cluster reach the API at
+
+  http://{{ include "conductor.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/api
+
+To look at it without publishing anything:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "conductor.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
