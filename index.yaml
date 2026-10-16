@@ -3,9 +3,9 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v2
     appVersion: 1.2.5
-    created: "2026-10-16T07:56:03.728864916Z"
+    created: "2026-10-16T08:02:17.801786769Z"
     description: ISPManager Cert-Manager ACME webhook
-    digest: 8c16b64235102dbaf026e9105dfff1320eae6ef4769029c305b42ee3b20b8e0e
+    digest: ca5dae62cdcaeca1debd9326c0285cdb66a12f4c17b6294f95a3c8ed1824d074
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - cert-manager
@@ -146,6 +146,28 @@ entries:
   conductor:
   - apiVersion: v2
     appVersion: 3.32.5
+    created: "2026-10-16T08:02:17.802292136Z"
+    description: Conductor OSS workflow engine with its UI, on PostgreSQL and Elasticsearch
+    digest: 83fa2786a1413db8d14c212a96bcd8ca4449f170940080ba00b09c1ded247ab8
+    home: https://github.com/GlobalArtInc/helm-charts
+    keywords:
+    - conductor
+    - workflow
+    - orchestration
+    kubeVersion: '>=1.21.0-0'
+    maintainers:
+    - email: support@globalart.com
+      name: GlobalArt Inc
+    name: conductor
+    sources:
+    - https://github.com/conductor-oss/conductor
+    - https://github.com/conductor-oss/getting-started/tree/main/kubernetes
+    type: application
+    urls:
+    - https://GlobalArtInc.github.io/helm-charts/conductor-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 3.32.5
     created: "2026-10-16T07:56:03.729653259Z"
     description: Conductor OSS workflow engine with its UI, on PostgreSQL and Elasticsearch
     digest: 2d5205cad6bc2e10dfababba76bf5c96a847b2ad5e0b9e9444fff6320f0d024b
@@ -169,9 +191,9 @@ entries:
   gitlab-mr-combiner:
   - apiVersion: v1
     appVersion: 1.0.0
-    created: "2026-10-16T07:56:03.730048828Z"
+    created: "2026-10-16T08:02:17.802511945Z"
     description: Gitlab MR Combiner
-    digest: 72a089f31afaaf7a41d418aaf93969c3c83412401ec31c9260fcba03518db1f7
+    digest: 4cb95ebf2a8db4aff08b740108a0913c035b9b3c7310b085c3515421692e93c5
     name: gitlab-mr-combiner
     urls:
     - https://GlobalArtInc.github.io/helm-charts/gitlab-mr-combiner-1.0.0.tgz
@@ -179,9 +201,9 @@ entries:
   mediacore:
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-16T07:56:03.73199353Z"
+    created: "2026-10-16T08:02:17.803804681Z"
     description: WebRTC SFU speaking the LiveKit protocol, with its own front end
-    digest: 48cce6d452bda99d8171d74b7c86e583bcbe29950223b981caf2e613257a4218
+    digest: 86850cd653669a187d78c8c058664666b3bb61f65f6fbfc05d85fba593ac1621
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - webrtc
@@ -553,9 +575,9 @@ entries:
     version: 0.1.0
   route:
   - apiVersion: v2
-    created: "2026-10-16T07:56:03.732195557Z"
+    created: "2026-10-16T08:02:17.803946413Z"
     description: 'Публикация приложения через шлюз: сертификат, слушатель и маршрут'
-    digest: b272811499f7c14eccf2a4695368cd7825d0d831bdef5c3f33c66f49f08b4327
+    digest: eaa3f8e56aceb0fb2cc1c4095b573aa63f4b1b92f6e938e6212437432eb5bd75
     name: route
     type: application
     urls:
@@ -564,9 +586,9 @@ entries:
   smev4-agent:
   - apiVersion: v2
     appVersion: 3.29.1
-    created: "2026-10-16T07:56:03.733419692Z"
+    created: "2026-10-16T08:02:17.804199762Z"
     description: Helm chart for deploying the SMEV4 (einfahrt) agent wrapped in globalartltd/smev4-agent
-    digest: ee142810b41db82887bc936723cb3083ff812e938144d9c7744c7c2d54132ad0
+    digest: a85cae69bc068332a17b763392e93582af1f08d548212c9c99aba16eac6e1d2d
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - smev
@@ -581,4 +603,4 @@ entries:
     urls:
     - https://GlobalArtInc.github.io/helm-charts/smev4-agent-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-16T07:56:03.728273502Z"
+generated: "2026-10-16T08:02:17.801301793Z"
