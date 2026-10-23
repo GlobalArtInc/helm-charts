@@ -43,7 +43,19 @@ The registration comes from an existing Secret, not from values: the same file h
 
 ## Webhooks
 
-Hookshot answers generic webhooks at `/webhook/<id>` on port `9000`, so `path` defaults to `/webhook` and `generic.urlPrefix` should end the same way. Nothing rewrites the path on the way in.
+Hookshot answers generic webhooks at `/webhook/<id>` on port `9000`, so `path` defaults to `/webhook` and is published as is.
+
+To publish the webhooks under other paths as well, list them in `extraPaths`; each is rewritten to `path` on the way in:
+
+```yaml
+extraPaths:
+  - /hookshot/webhooks
+config:
+  generic:
+    urlPrefix: https://matrix.example.com/hookshot/webhooks
+```
+
+`generic.urlPrefix` is the address Hookshot hands out for new webhooks; point it at whichever of the published paths the senders should use. The HTTPRoute rewrites with a `URLRewrite` filter (`ReplacePrefixMatch`). The Ingress gets a `rewrite` line per extra path in `nginx.ingress.kubernetes.io/configuration-snippet`, appended to a snippet already set in `ingress.annotations`; that is ingress-nginx only and needs snippet annotations allowed by the controller. It rewrites inside the locations of this Ingress and leaves the regex mode of the host alone, which `rewrite-target` would not.
 
 ## Publishing
 

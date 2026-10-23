@@ -7,7 +7,16 @@ metadata:
   name: {{ include "matrix-hookshot.fullname" . }}
   labels:
     {{- include "matrix-hookshot.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  {{- $annotations := deepCopy (default dict .Values.ingress.annotations) }}
+  {{- if .Values.extraPaths }}
+  {{- $rewrites := list }}
+  {{- range .Values.extraPaths }}
+  {{- $rewrites = append $rewrites (printf "rewrite ^%s(/.*)?$ %s$1 break;" . $.Values.path) }}
+  {{- end }}
+  {{- $snippet := get $annotations "nginx.ingress.kubernetes.io/configuration-snippet" }}
+  {{- $_ := set $annotations "nginx.ingress.kubernetes.io/configuration-snippet" (join "\n" (compact (concat (list $snippet) $rewrites))) }}
+  {{- end }}
+  {{- with $annotations }}
   annotations:
     {{- range $key, $value := . }}
     {{ $key }}: {{ $value | quote }}
@@ -34,4 +43,13 @@ spec:
                 name: {{ include "matrix-hookshot.fullname" . }}
                 port:
                   number: 9000
+          {{- range .Values.extraPaths }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "matrix-hookshot.fullname" $ }}
+                port:
+                  number: 9000
+          {{- end }}
 {{- end }}

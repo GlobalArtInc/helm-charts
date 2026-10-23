@@ -107,4 +107,19 @@ spec:
       backendRefs:
         - name: {{ include "matrix-hookshot.fullname" . }}
           port: 9000
+    {{- range .Values.extraPaths }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ . }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: {{ $.Values.path }}
+      backendRefs:
+        - name: {{ include "matrix-hookshot.fullname" $ }}
+          port: 9000
+    {{- end }}
 {{- end }}

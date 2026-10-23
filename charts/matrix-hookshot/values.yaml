@@ -9,6 +9,8 @@ passkey: ""
 
 path: /webhook
 
+extraPaths: []
+
 registration:
   secretName: ""
   key: ""
