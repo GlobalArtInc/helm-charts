@@ -15,12 +15,36 @@ resources:
     cpu: 200m
     memory: 128Mi
 
+route:
+  enabled: false
+  host: ""
+  gateway:
+    name: moscow-gateway
+    namespace: envoy-gateway-system
+    sectionName: ""
+  listenerSet:
+    enabled: false
+    attachTo: ""
+  tls:
+    secretName: ""
+    secretNamespace: ""
+    certificate:
+      enabled: false
+      issuer: letsencrypt
+    referenceGrant:
+      enabled: true
+      name: ""
+  annotations: {}
+
 ingress:
+  enabled: false
   className: nginx
   host: ""
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  tls:
+    secretName: ""
 
 admin:
   username: ""

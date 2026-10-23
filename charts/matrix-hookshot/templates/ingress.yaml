@@ -1,4 +1,6 @@
-{{- if .Values.ingress.host }}
+{{- include "matrix-hookshot.validate" . -}}
+{{- if .Values.ingress.enabled }}
+{{- $host := include "matrix-hookshot.ingress.host" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,19 +9,29 @@ metadata:
     {{- include "matrix-hookshot.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
   {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls.secretName }}
+  tls:
+    - hosts:
+        - {{ $host }}
+      secretName: {{ . }}
+  {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    - host: {{ $host | quote }}
       http:
         paths:
-          - path: {{ .Values.ingress.path }}
+          - path: {{ .Values.path }}
             pathType: Prefix
             backend:
               service:
                 name: {{ include "matrix-hookshot.fullname" . }}
                 port:
-                  name: webhooks
+                  number: 9000
 {{- end }}

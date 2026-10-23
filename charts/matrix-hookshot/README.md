@@ -2,7 +2,7 @@
 
 [Hookshot](https://github.com/matrix-org/matrix-hookshot) as an application service next to a Synapse release in the same namespace. The upstream chart stopped at Hookshot 6.0.2; this one runs 7.x with a configuration written as values.
 
-One Deployment and one Service with two ports: `9993`, the application service API Synapse pushes transactions to, and `9000`, the webhooks listener, published by an optional Ingress.
+One Deployment and one Service with two ports: `9993`, the application service API Synapse pushes transactions to, and `9000`, the webhooks listener, published through Gateway API or an Ingress.
 
 ## Values
 
@@ -30,7 +30,8 @@ passkey: |
 registration:
   secretName: matrix-appservices
   key: hookshot.yaml
-ingress:
+route:
+  enabled: true
   host: matrix.example.com
 ```
 
@@ -42,6 +43,60 @@ The registration comes from an existing Secret, not from values: the same file h
 
 ## Webhooks
 
-Hookshot answers generic webhooks at `/webhook/<id>` on port `9000`, so `ingress.path` defaults to `/webhook` and `generic.urlPrefix` should end the same way. No rewrite is involved, which matters with ingress-nginx: a `rewrite-target` would enable regex paths for the whole host the homeserver shares.
+Hookshot answers generic webhooks at `/webhook/<id>` on port `9000`, so `path` defaults to `/webhook` and `generic.urlPrefix` should end the same way. Nothing rewrites the path on the way in.
+
+## Publishing
+
+Nothing is published by default. Gateway API and Ingress are alternatives; both may be on while moving between them. Either way only `path` (`/webhook`) on the host is published, so the chart sits next to the homeserver on the host the homeserver owns.
+
+### Gateway API
+
+An `HTTPRoute` for `path` (`/webhook`) on `route.host`. The listener of a shared host is not this chart's: the homeserver's release, or the gateway, already terminates TLS for it, and two ListenerSets with the same hostname on one gateway conflict. So by default the route joins a listener that exists.
+
+Join the gateway's own listener:
+
+```console
+--set route.enabled=true \
+--set route.host=matrix.example.com \
+--set route.gateway.name=moscow-gateway \
+--set route.gateway.namespace=envoy-gateway-system \
+--set route.gateway.sectionName=https
+```
+
+`route.gateway.sectionName` is optional; without it the route is offered to every listener of the gateway that matches the host.
+
+Join the ListenerSet another release made for the host, in this namespace:
+
+```console
+--set route.enabled=true \
+--set route.host=matrix.example.com \
+--set route.listenerSet.attachTo=matrix-synapse-listeners
+```
+
+The route takes the `https` section of that ListenerSet, or `route.gateway.sectionName` when it is set.
+
+On a host of its own, the chart makes the listener itself, in the house shape of `conductor` and `mediacore`: a `ListenerSet` on the gateway and the route on it.
+
+```console
+--set route.enabled=true \
+--set route.host=hooks.example.com \
+--set route.listenerSet.enabled=true \
+--set route.tls.secretName=wildcard-example-com
+```
+
+- `route.tls.secretNamespace` names the namespace of a certificate that lives elsewhere. A `ReferenceGrant` in that namespace is not this chart's to create.
+- `route.tls.certificate.enabled=true` orders a `Certificate` from the `route.tls.certificate.issuer` ClusterIssuer, for a name no wildcard covers.
+- `route.tls.referenceGrant.enabled` (default `true`) lets the gateway read the Secret in this namespace.
+
+`route.listenerSet.enabled` and `route.listenerSet.attachTo` exclude each other.
+
+### Ingress
+
+```console
+--set ingress.enabled=true \
+--set ingress.host=matrix.example.com
+```
+
+`ingress.host` falls back to `route.host`; `ingress.className` defaults to `nginx`, and `ingress.tls.secretName` adds a TLS section when the controller does not terminate TLS with a default certificate. The path is a plain `Prefix`: a `rewrite-target` would turn on regex matching for every path of the host with ingress-nginx, the homeserver's `/_matrix` included.
 
 The pod runs as a non-root user with a read-only root filesystem; `/tmp` is an emptyDir.

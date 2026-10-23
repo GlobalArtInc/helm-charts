@@ -1,0 +1,110 @@
+{{- include "synapse-admin.validate" . -}}
+{{- if .Values.route.enabled }}
+{{- if .Values.route.listenerSet.enabled }}
+{{- $tlsSecret := include "synapse-admin.route.tlsSecretName" . }}
+{{- if .Values.route.tls.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $tlsSecret }}
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $tlsSecret }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ .Values.route.tls.certificate.issuer }}
+  commonName: {{ .Values.route.host }}
+  dnsNames:
+    - {{ .Values.route.host }}
+---
+{{- end }}
+{{- if and .Values.route.tls.referenceGrant.enabled (not .Values.route.tls.secretNamespace) }}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ default (printf "%s-tls-read" (include "synapse-admin.fullname" .)) .Values.route.tls.referenceGrant.name }}
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: {{ .Values.route.gateway.namespace }}
+  to:
+    - group: ''
+      kind: Secret
+      name: {{ $tlsSecret }}
+---
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}-listeners
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+spec:
+  parentRef:
+    name: {{ .Values.route.gateway.name }}
+    namespace: {{ .Values.route.gateway.namespace }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      hostname: {{ .Values.route.host }}
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $tlsSecret }}
+            {{- with .Values.route.tls.secretNamespace }}
+            namespace: {{ . }}
+            {{- end }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}-route
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- if .Values.route.listenerSet.enabled }}
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "synapse-admin.fullname" . }}-listeners
+      sectionName: https
+    {{- else if .Values.route.listenerSet.attachTo }}
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ .Values.route.listenerSet.attachTo }}
+      sectionName: {{ default "https" .Values.route.gateway.sectionName }}
+    {{- else }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.route.gateway.name }}
+      namespace: {{ .Values.route.gateway.namespace }}
+      {{- with .Values.route.gateway.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+    {{- end }}
+  hostnames:
+    - {{ .Values.route.host }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.path }}
+      backendRefs:
+        - name: {{ include "synapse-admin.fullname" . }}
+          port: 8080
+{{- end }}
