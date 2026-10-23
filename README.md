@@ -10,6 +10,9 @@ This repository contains [Helm](https://helm.sh) charts for various projects
 * [MediaCore (WebRTC SFU)](https://github.com/GlobalArtInc/mediacore)
 * [SMEV4 Agent](https://github.com/GlobalArtInc/smev4-agent)
 * [Route (Gateway API publishing)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/route)
+* [Matrix Hookshot](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/matrix-hookshot)
+* [Synapse admin UI (Ketesa)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/synapse-admin)
+* [Synapse secrets (signing key, appservices)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/synapse-secrets)
 
 ## Usage
 
