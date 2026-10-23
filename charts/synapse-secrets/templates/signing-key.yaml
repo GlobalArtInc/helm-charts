@@ -1,0 +1,12 @@
+{{- if .Values.signingKey.value }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "synapse-secrets.signingKeyName" . }}
+  labels:
+    {{- include "synapse-secrets.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+stringData:
+  signing.key: {{ .Values.signingKey.value | quote }}
+{{- end }}

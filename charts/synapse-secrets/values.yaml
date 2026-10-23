@@ -1,0 +1,7 @@
+signingKey:
+  secretName: ""
+  value: ""
+
+appservices:
+  secretName: ""
+  registrations: {}

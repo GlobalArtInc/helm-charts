@@ -1,0 +1,16 @@
+apiVersion: v2
+name: synapse-secrets
+description: Signing key and application service registrations for a Synapse homeserver
+type: application
+version: 0.1.0
+home: https://github.com/GlobalArtInc/helm-charts
+sources:
+  - https://github.com/element-hq/synapse
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.com
+keywords:
+  - matrix
+  - synapse
+  - appservice
+kubeVersion: ">=1.21.0-0"

@@ -1,0 +1,13 @@
+{{- if .Values.appservices.registrations }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "synapse-secrets.appservicesName" . }}
+  labels:
+    {{- include "synapse-secrets.labels" . | nindent 4 }}
+stringData:
+  {{- range $name, $registration := .Values.appservices.registrations }}
+  {{ $name }}.yaml: |
+    {{- toYaml $registration | nindent 4 }}
+  {{- end }}
+{{- end }}
