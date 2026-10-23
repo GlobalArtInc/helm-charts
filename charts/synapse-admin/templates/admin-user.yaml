@@ -1,0 +1,74 @@
+{{- if .Values.admin.username }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}-admin-user
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+stringData:
+  password: {{ required "admin.password is required" .Values.admin.password | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}-admin-user
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "synapse-admin.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: admin-user
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: register
+          image: "{{ .Values.admin.image.repository }}:{{ .Values.admin.image.tag }}"
+          imagePullPolicy: {{ .Values.admin.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              if out=$(register_new_matrix_user -c /synapse/secrets/config.yaml -u "$ADMIN_USERNAME" -p "$ADMIN_PASSWORD" --admin "$SYNAPSE_URL" 2>&1); then
+                echo "$out"
+                exit 0
+              fi
+              echo "$out"
+              case "$out" in
+                *"User ID already taken"*) exit 0 ;;
+              esac
+              exit 1
+          env:
+            - name: ADMIN_USERNAME
+              value: {{ .Values.admin.username | quote }}
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "synapse-admin.fullname" . }}-admin-user
+                  key: password
+            - name: SYNAPSE_URL
+              value: {{ required "admin.synapseUrl is required" .Values.admin.synapseUrl | quote }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: synapse-config
+              mountPath: /synapse/secrets
+              readOnly: true
+      volumes:
+        - name: synapse-config
+          secret:
+            secretName: {{ required "admin.synapseConfigSecret is required" .Values.admin.synapseConfigSecret }}
+            items:
+              - key: {{ .Values.admin.synapseConfigSecretKey }}
+                path: config.yaml
+{{- end }}

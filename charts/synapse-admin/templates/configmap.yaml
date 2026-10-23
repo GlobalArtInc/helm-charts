@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+data:
+  config.json: {{ .Values.config | toJson | quote }}

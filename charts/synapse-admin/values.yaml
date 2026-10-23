@@ -1,0 +1,34 @@
+image:
+  repository: ghcr.io/etkecc/ketesa
+  tag: v1.5.1
+  pullPolicy: IfNotPresent
+
+path: /synapse-admin
+
+config: {}
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+ingress:
+  className: nginx
+  host: ""
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+admin:
+  username: ""
+  password: ""
+  synapseUrl: ""
+  synapseConfigSecret: ""
+  synapseConfigSecretKey: config.yaml
+  image:
+    repository: ghcr.io/element-hq/synapse
+    tag: v1.163.1
+    pullPolicy: IfNotPresent

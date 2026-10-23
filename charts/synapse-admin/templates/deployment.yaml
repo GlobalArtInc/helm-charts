@@ -1,0 +1,70 @@
+{{- $root := printf "/srv%s" .Values.path }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "synapse-admin.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "synapse-admin.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        - name: publish
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p {{ $root }}
+              cp -r /home/sws/public/. {{ $root }}/
+              cp /config/config.json {{ $root }}/config.json
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: srv
+              mountPath: /srv
+            - name: config
+              mountPath: /config
+      containers:
+        - name: ketesa
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SERVER_HOST
+              value: 0.0.0.0
+            - name: SERVER_ROOT
+              value: /srv
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: srv
+              mountPath: /srv
+              readOnly: true
+      volumes:
+        - name: srv
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "synapse-admin.fullname" . }}

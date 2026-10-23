@@ -1,0 +1,18 @@
+apiVersion: v2
+name: synapse-admin
+description: Ketesa admin UI for Synapse under a path of the homeserver host, and its first admin user
+type: application
+version: 0.1.0
+appVersion: v1.5.1
+home: https://github.com/GlobalArtInc/helm-charts
+sources:
+  - https://github.com/etkecc/ketesa
+  - https://github.com/element-hq/synapse
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.com
+keywords:
+  - matrix
+  - synapse
+  - admin
+kubeVersion: ">=1.21.0-0"

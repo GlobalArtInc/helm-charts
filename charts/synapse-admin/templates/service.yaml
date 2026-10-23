@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "synapse-admin.fullname" . }}
+  labels:
+    {{- include "synapse-admin.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "synapse-admin.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
