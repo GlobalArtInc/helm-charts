@@ -2,7 +2,7 @@ apiVersion: v2
 name: conductor
 description: Conductor OSS workflow engine with its UI, on PostgreSQL and Elasticsearch
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "3.32.5"
 home: https://github.com/GlobalArtInc/helm-charts
 sources:
@@ -10,7 +10,7 @@ sources:
   - https://github.com/conductor-oss/getting-started/tree/main/kubernetes
 maintainers:
   - name: GlobalArt Inc
-    email: support@globalart.com
+    email: support@globalart.dev
 keywords:
   - conductor
   - workflow

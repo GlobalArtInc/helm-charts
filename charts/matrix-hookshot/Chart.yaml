@@ -2,14 +2,14 @@ apiVersion: v2
 name: matrix-hookshot
 description: Hookshot, the Matrix bridge for webhooks and code forges, as an application service of a Synapse release
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: 7.5.0
 home: https://github.com/GlobalArtInc/helm-charts
 sources:
   - https://github.com/matrix-org/matrix-hookshot
 maintainers:
   - name: GlobalArt Inc
-    email: support@globalart.com
+    email: support@globalart.dev
 keywords:
   - matrix
   - hookshot
