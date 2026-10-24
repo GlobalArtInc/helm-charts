@@ -107,4 +107,13 @@ spec:
       backendRefs:
         - name: {{ include "synapse-admin.fullname" . }}
           port: 8080
+    {{- if .Values.adminApi.enabled }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.adminApi.path }}
+      backendRefs:
+        - name: {{ .Values.adminApi.service.name }}
+          port: {{ .Values.adminApi.service.port }}
+    {{- end }}
 {{- end }}

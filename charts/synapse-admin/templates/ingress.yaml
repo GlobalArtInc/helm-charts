@@ -34,4 +34,13 @@ spec:
                 name: {{ include "synapse-admin.fullname" . }}
                 port:
                   number: 8080
+          {{- if .Values.adminApi.enabled }}
+          - path: {{ .Values.adminApi.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.adminApi.service.name }}
+                port:
+                  number: {{ .Values.adminApi.service.port }}
+          {{- end }}
 {{- end }}

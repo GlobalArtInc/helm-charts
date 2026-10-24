@@ -46,6 +46,13 @@ ingress:
   tls:
     secretName: ""
 
+adminApi:
+  enabled: false
+  path: /_synapse/admin
+  service:
+    name: ""
+    port: 8008
+
 admin:
   username: ""
   password: ""

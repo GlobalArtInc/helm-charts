@@ -72,6 +72,20 @@ On a host of its own, the chart makes the listener itself, in the house shape of
 
 `ingress.host` falls back to `route.host`; `ingress.className` defaults to `nginx`, and `ingress.tls.secretName` adds a TLS section when the controller does not terminate TLS with a default certificate. The path is a plain `Prefix`: a `rewrite-target` would turn on regex matching for every path of the host with ingress-nginx, the homeserver's `/_matrix` included.
 
+## Admin API
+
+The UI talks to the homeserver's admin API, `/_synapse/admin`, from the browser. Where the homeserver itself is published to everyone, that API should not be: the old way is to publish the client API openly and let only the admins' networks reach `/_synapse/admin`. With `adminApi.enabled` this chart publishes `/_synapse/admin` of the homeserver next to the UI, under the same route or Ingress and so under the same restrictions:
+
+```yaml
+adminApi:
+  enabled: true
+  service:
+    name: matrix-synapse
+    port: 8008
+```
+
+The homeserver's own route or Ingress may keep a broader `/_synapse` or `/` path: the longer `/_synapse/admin` prefix wins in both ingress-nginx and Gateway API. With ingress-nginx, open the homeserver's Ingress (`nginx.ingress.kubernetes.io/whitelist-source-range: 0.0.0.0/0`) and leave this one on the controller's default allow-list, or set the allow-list here in `ingress.annotations`.
+
 ## First admin user
 
 ```yaml

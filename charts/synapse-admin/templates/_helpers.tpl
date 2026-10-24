@@ -36,6 +36,9 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- if and .Values.route.enabled .Values.route.listenerSet.enabled -}}
 {{- $_ := include "synapse-admin.route.tlsSecretName" . -}}
 {{- end -}}
+{{- if and .Values.adminApi.enabled (not .Values.adminApi.service.name) -}}
+{{- fail "adminApi.enabled is on and adminApi.service.name is empty. Name the Service of the Synapse release, for example matrix-synapse." -}}
+{{- end -}}
 {{- if and .Values.ingress.enabled (not (include "synapse-admin.ingress.host" .)) -}}
 {{- fail "ingress.enabled is on and there is no hostname to publish. Set ingress.host, or leave it empty and set route.host, which it falls back to." -}}
 {{- end -}}
