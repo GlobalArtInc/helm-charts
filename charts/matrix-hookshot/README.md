@@ -2,7 +2,7 @@
 
 [Hookshot](https://github.com/matrix-org/matrix-hookshot) as an application service next to a Synapse release in the same namespace. The upstream chart stopped at Hookshot 6.0.2; this one runs 7.x with a configuration written as values.
 
-One Deployment and one Service with two ports: `9993`, the application service API Synapse pushes transactions to, and `9000`, the webhooks listener, published through Gateway API or an Ingress.
+One Deployment and one Service with two ports: `9993`, the application service API Synapse pushes transactions to, and `9000`, the webhooks listener, published through Gateway API or an Ingress. A third one, the widget API, is optional (see [Widget API](#widget-api)).
 
 ## Values
 
@@ -56,6 +56,32 @@ config:
 ```
 
 `generic.urlPrefix` is the address Hookshot hands out for new webhooks; point it at whichever of the published paths the senders should use. The HTTPRoute rewrites with a `URLRewrite` filter (`ReplacePrefixMatch`). The Ingress gets a `rewrite` line per extra path in `nginx.ingress.kubernetes.io/configuration-snippet`, appended to a snippet already set in `ingress.annotations`; that is ingress-nginx only and needs snippet annotations allowed by the controller. It rewrites inside the locations of this Ingress and leaves the regex mode of the host alone, which `rewrite-target` would not.
+
+## Widget API
+
+Hookshot 7 has no provisioning API; a service that manages connections from outside Matrix does it through the widget API, `/widgetapi/v1`, with a session it gets for an OpenID token of a Matrix account. `widgets.enabled` opens a port for it on the pod and the Service:
+
+```yaml
+widgets:
+  enabled: true
+  port: 9002
+config:
+  listeners:
+    - port: 9000
+      bindAddress: 0.0.0.0
+      resources:
+        - webhooks
+    - port: 9002
+      bindAddress: 0.0.0.0
+      resources:
+        - widgets
+  widgets:
+    publicUrl: https://matrix.example.com/hookshot/widgetapi/v1/static
+    openIdOverrides:
+      example.com: http://matrix-synapse:8008
+```
+
+The listener itself is Hookshot's configuration, so it goes into `config` with the same port. Hookshot checks the token at `/_matrix/federation/v1/openid/userinfo` of the account's homeserver; `openIdOverrides` sends it to the homeserver inside the namespace when federation is not published. The port is not published by the route or the Ingress: it is for services in the cluster.
 
 ## Publishing
 

@@ -39,6 +39,11 @@ spec:
             - name: webhooks
               containerPort: 9000
               protocol: TCP
+            {{- if .Values.widgets.enabled }}
+            - name: widgets
+              containerPort: {{ .Values.widgets.port }}
+              protocol: TCP
+            {{- end }}
           readinessProbe:
             tcpSocket:
               port: appservice

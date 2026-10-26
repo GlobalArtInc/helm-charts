@@ -11,6 +11,10 @@ path: /webhook
 
 extraPaths: []
 
+widgets:
+  enabled: false
+  port: 9002
+
 registration:
   secretName: ""
   key: ""

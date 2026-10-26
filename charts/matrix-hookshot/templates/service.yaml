@@ -17,3 +17,9 @@ spec:
       port: 9000
       targetPort: webhooks
       protocol: TCP
+    {{- if .Values.widgets.enabled }}
+    - name: widgets
+      port: {{ .Values.widgets.port }}
+      targetPort: widgets
+      protocol: TCP
+    {{- end }}
