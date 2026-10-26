@@ -4,6 +4,8 @@
 
 One Deployment and one Service with two ports: `9993`, the application service API Synapse pushes transactions to, and `9000`, the webhooks listener, published through Gateway API or an Ingress. A third one, the widget API, is optional (see [Widget API](#widget-api)).
 
+Resources are named after the release. `fullnameOverride` names them otherwise — for a subchart of an application chart, where the release name is the application's.
+
 ## Values
 
 ```yaml

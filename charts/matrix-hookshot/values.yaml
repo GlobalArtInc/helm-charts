@@ -1,3 +1,5 @@
+fullnameOverride: ""
+
 image:
   repository: ghcr.io/matrix-org/matrix-hookshot
   tag: 7.5.0

@@ -2,6 +2,8 @@
 
 [Ketesa](https://github.com/etkecc/ketesa), the successor of the etke.cc synapse-admin, served under a path of the homeserver's own host (`https://matrix.example.com/synapse-admin/`), plus a hook that registers the homeserver's first admin user.
 
+Resources are named after the release. `fullnameOverride` names them otherwise — for a subchart of an application chart, where the release name is the application's.
+
 ## UI
 
 ```yaml

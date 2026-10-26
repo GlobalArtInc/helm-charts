@@ -1,5 +1,5 @@
 {{- define "synapse-admin.fullname" -}}
-{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- default .Release.Name .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "synapse-admin.selectorLabels" -}}
