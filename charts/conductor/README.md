@@ -10,7 +10,7 @@ One Deployment, one Service on port `8080`. The server answers the UI and the AP
 |---|---|---|
 | PostgreSQL | required | Workflow state and queues. The database has to exist before the first start; the server creates its schema itself. |
 | Elasticsearch **7.x** | required by default | Search in the UI. See below for why not 8. |
-| Redis | only with `replicaCount` > 1 | The distributed lock. The chart refuses to render two replicas without it. |
+| Redis | only with `lock.type` `redis` | The distributed lock for several replicas. `lock.type` `postgres` uses PostgreSQL instead. The chart refuses to render two replicas without a lock. |
 
 ### Elasticsearch has to be 7.x
 
@@ -92,7 +92,7 @@ To attach to a listener that already exists, without a `ListenerSet` (and so wit
 --set lock.redis.address=redis://redis:6379
 ```
 
-`lock.type` is `none` (default, one replica), `local_only` (one replica, in-process) or `redis`.
+`lock.type` is `none` (default, one replica), `local_only` (one replica, in-process), `redis` or `postgres` (the lock lives in the same PostgreSQL database, no extra service; it works with several replicas).
 
 ## Values
 

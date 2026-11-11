@@ -36,6 +36,9 @@ data:
     {{- else if eq .Values.lock.type "local_only" }}
     conductor.workflow-execution-lock.type=local_only
     conductor.app.workflowExecutionLockEnabled=true
+    {{- else if eq .Values.lock.type "postgres" }}
+    conductor.workflow-execution-lock.type=postgres
+    conductor.app.workflowExecutionLockEnabled=true
     {{- end }}
     {{- if .Values.metrics.enabled }}
     conductor.metrics-prometheus.enabled=true

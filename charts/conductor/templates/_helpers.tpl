@@ -84,14 +84,14 @@ true
 {{- if and .Values.elasticsearch.enabled (not .Values.elasticsearch.url) -}}
 {{- fail "elasticsearch.url is not set. Search in the UI needs Elasticsearch; set elasticsearch.enabled to false to run without it." -}}
 {{- end -}}
-{{- if not (has .Values.lock.type (list "none" "local_only" "redis")) -}}
-{{- fail "lock.type must be none, local_only or redis." -}}
+{{- if not (has .Values.lock.type (list "none" "local_only" "redis" "postgres")) -}}
+{{- fail "lock.type must be none, local_only, redis or postgres." -}}
 {{- end -}}
 {{- if and (eq .Values.lock.type "redis") (not .Values.lock.redis.address) -}}
 {{- fail "lock.redis.address is not set, and lock.type is redis. It is a redis:// URL, for example redis://redis:6379." -}}
 {{- end -}}
-{{- if and (gt (int .Values.replicaCount) 1) (ne .Values.lock.type "redis") -}}
-{{- fail (printf "replicaCount is %d and lock.type is %s. Several server instances need a distributed lock so that two of them do not decide the same workflow at once; set lock.type to redis, or run one replica." (int .Values.replicaCount) .Values.lock.type) -}}
+{{- if and (gt (int .Values.replicaCount) 1) (not (has .Values.lock.type (list "redis" "postgres"))) -}}
+{{- fail (printf "replicaCount is %d and lock.type is %s. Several server instances need a distributed lock so that two of them do not decide the same workflow at once; set lock.type to postgres or redis, or run one replica." (int .Values.replicaCount) .Values.lock.type) -}}
 {{- end -}}
 {{- if .Values.route.enabled -}}
 {{- if not .Values.route.host -}}
