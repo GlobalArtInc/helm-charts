@@ -126,6 +126,123 @@
         },
         "existingSecretKey": {
           "type": "string"
+        },
+        "cluster": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "replicas": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "clusterDomain": {
+              "type": "string"
+            },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "imagePullSecrets": {
+              "type": "array"
+            },
+            "heapSize": {
+              "type": "string",
+              "pattern": "^[0-9]+[mMgG]$"
+            },
+            "javaOpts": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object",
+              "properties": {
+                "storageClass": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "antiAffinity": {
+              "type": "string",
+              "enum": [
+                "hard",
+                "soft",
+                "none"
+              ]
+            },
+            "pdb": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "minAvailable": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "joinSeedHosts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowMmap": {
+              "type": "boolean"
+            },
+            "extraConfig": {
+              "type": "object"
+            },
+            "extraEnv": {
+              "type": "array"
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podLabels": {
+              "type": "object"
+            },
+            "terminationGracePeriodSeconds": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

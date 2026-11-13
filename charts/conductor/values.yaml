@@ -35,6 +35,40 @@ elasticsearch:
   password: ""
   existingSecret: ""
   existingSecretKey: password
+  cluster:
+    enabled: false
+    name: conductor-elasticsearch
+    replicas: 3
+    clusterDomain: cluster.local
+    image:
+      repository: docker.io/library/elasticsearch
+      tag: "7.17.26"
+      pullPolicy: IfNotPresent
+    imagePullSecrets: []
+    heapSize: 512m
+    javaOpts: ""
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 1536Mi
+    persistence:
+      storageClass: ""
+      size: 30Gi
+    antiAffinity: hard
+    pdb:
+      enabled: true
+      minAvailable: 2
+    joinSeedHosts: []
+    allowMmap: false
+    extraConfig: {}
+    extraEnv: []
+    nodeSelector: {}
+    tolerations: []
+    podAnnotations: {}
+    podLabels: {}
+    terminationGracePeriodSeconds: 120
 
 lock:
   type: none

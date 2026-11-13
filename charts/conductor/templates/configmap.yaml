@@ -17,7 +17,7 @@ data:
     conductor.indexing.enabled=true
     conductor.indexing.type=elasticsearch
     conductor.elasticsearch.version=7
-    conductor.elasticsearch.url={{ .Values.elasticsearch.url }}
+    conductor.elasticsearch.url={{ include "conductor.elasticsearch.url" . }}
     conductor.elasticsearch.indexName={{ .Values.elasticsearch.indexName }}
     conductor.elasticsearch.clusterHealthColor={{ .Values.elasticsearch.clusterHealthColor }}
     {{- if not (kindIs "invalid" .Values.elasticsearch.indexReplicasCount) }}

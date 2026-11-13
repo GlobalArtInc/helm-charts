@@ -1,0 +1,13 @@
+{{- if and .Values.elasticsearch.enabled .Values.elasticsearch.cluster.enabled .Values.elasticsearch.cluster.pdb.enabled (ge (int .Values.elasticsearch.cluster.replicas) 3) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "conductor.es.fullname" . }}
+  labels:
+    {{- include "conductor.es.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.elasticsearch.cluster.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "conductor.es.selectorLabels" . | nindent 6 }}
+{{- end }}

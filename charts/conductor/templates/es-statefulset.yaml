@@ -1,0 +1,170 @@
+{{- if and .Values.elasticsearch.enabled .Values.elasticsearch.cluster.enabled }}
+{{- $cluster := .Values.elasticsearch.cluster }}
+{{- $esName := include "conductor.es.fullname" . }}
+{{- $headless := include "conductor.es.headlessName" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $esName }}
+  labels:
+    {{- include "conductor.es.labels" . | nindent 4 }}
+spec:
+  replicas: {{ $cluster.replicas }}
+  serviceName: {{ $headless }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "conductor.es.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with $cluster.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "conductor.es.selectorLabels" . | nindent 8 }}
+        {{- with $cluster.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $cluster.terminationGracePeriodSeconds }}
+      {{- with $cluster.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        fsGroup: 1000
+      {{- if eq $cluster.antiAffinity "hard" }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "conductor.es.selectorLabels" . | nindent 18 }}
+      {{- else if eq $cluster.antiAffinity "soft" }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "conductor.es.selectorLabels" . | nindent 20 }}
+      {{- end }}
+      containers:
+        - name: elasticsearch
+          image: "{{ $cluster.image.repository }}:{{ $cluster.image.tag }}"
+          imagePullPolicy: {{ $cluster.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 9200
+              protocol: TCP
+            - name: transport
+              containerPort: 9300
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: cluster.name
+              value: {{ $cluster.name | quote }}
+            - name: node.name
+              value: "$(POD_NAME)"
+            - name: network.host
+              value: "0.0.0.0"
+            - name: network.publish_host
+              value: {{ printf "$(POD_NAME).%s.%s.svc.%s" $headless .Release.Namespace $cluster.clusterDomain | quote }}
+            - name: discovery.seed_hosts
+              value: {{ append $cluster.joinSeedHosts $headless | join "," | quote }}
+            {{- if and .Release.IsInstall (not $cluster.joinSeedHosts) }}
+            {{- $masters := list }}
+            {{- range $i := until (int $cluster.replicas) }}
+            {{- $masters = append $masters (printf "%s-%d" $esName $i) }}
+            {{- end }}
+            - name: cluster.initial_master_nodes
+              value: {{ join "," $masters | quote }}
+            {{- end }}
+            - name: xpack.security.enabled
+              value: "false"
+            {{- if not $cluster.allowMmap }}
+            - name: node.store.allow_mmap
+              value: "false"
+            {{- end }}
+            - name: ES_JAVA_OPTS
+              value: {{ trim (printf "-Xms%s -Xmx%s %s" $cluster.heapSize $cluster.heapSize $cluster.javaOpts) | quote }}
+            {{- range $key, $value := $cluster.extraConfig }}
+            - name: {{ $key | quote }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- with $cluster.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - |
+                  if [ -f /tmp/.es_ready ]; then
+                    curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:9200/_cluster/health?timeout=1s' | grep -qx 200
+                  else
+                    curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:9200/_cluster/health?wait_for_status=green&timeout=1s' | grep -qx 200 && touch /tmp/.es_ready
+                  fi
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- with $cluster.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+      {{- with $cluster.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $cluster.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with $cluster.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $cluster.persistence.size | quote }}
+{{- end }}

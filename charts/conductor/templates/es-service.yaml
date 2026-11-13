@@ -1,0 +1,40 @@
+{{- if and .Values.elasticsearch.enabled .Values.elasticsearch.cluster.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conductor.es.fullname" . }}
+  labels:
+    {{- include "conductor.es.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+      protocol: TCP
+      appProtocol: http
+  selector:
+    {{- include "conductor.es.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conductor.es.headlessName" . }}
+  labels:
+    {{- include "conductor.es.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+      protocol: TCP
+      appProtocol: http
+    - name: transport
+      port: 9300
+      targetPort: transport
+      protocol: TCP
+  selector:
+    {{- include "conductor.es.selectorLabels" . | nindent 4 }}
+{{- end }}
