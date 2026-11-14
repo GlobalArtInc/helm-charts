@@ -1,0 +1,30 @@
+apiVersion: v2
+name: matrix
+description: "Matrix homeserver stack: Tuwunel, with an optional Hookshot webhook bridge and a Synapse Admin interface"
+type: application
+version: 0.2.0
+appVersion: "2.0.0"
+home: https://github.com/GlobalArtInc/helm-charts
+sources:
+  - https://github.com/matrix-construct/tuwunel
+  - https://github.com/GlobalArtInc/helm-charts
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.dev
+keywords:
+  - matrix
+  - homeserver
+  - tuwunel
+  - chat
+  - hookshot
+  - synapse-admin
+kubeVersion: ">=1.25.0-0"
+dependencies:
+  - name: matrix-hookshot
+    version: 0.5.0
+    repository: https://globalartinc.github.io/helm-charts
+    condition: matrix-hookshot.enabled
+  - name: synapse-admin
+    version: 0.4.0
+    repository: https://globalartinc.github.io/helm-charts
+    condition: synapse-admin.enabled

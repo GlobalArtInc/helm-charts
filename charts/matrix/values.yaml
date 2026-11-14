@@ -278,3 +278,13 @@ podLabels: {}
 fullnameOverride: ""
 
 nameOverride: ""
+
+# Hookshot webhook bridge, from the matrix-hookshot chart. Its other values go under the same key.
+matrix-hookshot:
+  enabled: false
+  fullnameOverride: matrix-hookshot
+
+# Synapse Admin web interface, from the synapse-admin chart. Its other values go under the same key.
+synapse-admin:
+  enabled: false
+  fullnameOverride: synapse-admin

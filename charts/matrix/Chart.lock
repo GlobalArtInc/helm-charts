@@ -1,0 +1,9 @@
+dependencies:
+- name: matrix-hookshot
+  repository: https://globalartinc.github.io/helm-charts
+  version: 0.5.0
+- name: synapse-admin
+  repository: https://globalartinc.github.io/helm-charts
+  version: 0.4.0
+digest: sha256:526377ea240406f48eda9108649d451ae577ce82559dad2af5868e84e67bf299
+generated: "2026-11-14T20:33:56.014474+01:00"

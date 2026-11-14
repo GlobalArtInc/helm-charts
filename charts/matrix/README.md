@@ -1,4 +1,4 @@
-# tuwunel
+# matrix
 
 A Helm chart for [Tuwunel](https://github.com/matrix-construct/tuwunel), a
 Matrix homeserver written in Rust. It replaces Synapse: one Tuwunel process
@@ -30,12 +30,33 @@ you turn it on, an Ingress or a Gateway API route.
 
 ```console
 helm repo add globalart https://globalartinc.github.io/helm-charts
-helm install tuwunel globalart/tuwunel --set serverName=example.org
+helm install tuwunel globalart/matrix --set serverName=example.org
 ```
 
 `serverName` is required. It is the domain in every Matrix ID on the server
 (`@user:example.org`), and it becomes part of the data, so choose it before the
 first start.
+
+## Bundled components
+
+The chart can also deploy two companion charts from the same repository. Both are off by default.
+
+- `matrix-hookshot.enabled=true` deploys the Hookshot webhook bridge. Its other values go under the `matrix-hookshot` key.
+- `synapse-admin.enabled=true` deploys the Synapse Admin web interface. Its other values go under the `synapse-admin` key.
+
+When Hookshot is on, Helm refuses to render unless these three values are set:
+
+| Key | Meaning |
+|---|---|
+| `matrix-hookshot.passkey` | Passkey of the Hookshot bridge. The Hookshot chart writes it into its own Secret. |
+| `matrix-hookshot.registration.secretName` | Name of the Secret that holds the appservice registration file for Hookshot. |
+| `matrix-hookshot.registration.key` | Key of that Secret with the registration file. For a registration named `<name>` in `appservices.registrations` the key is `<name>.yaml`. |
+
+The chart makes the appservice Secret from `appservices.registrations` and names it `<fullname>-appservices`, so set `matrix-hookshot.registration.secretName` to that name. The chart creates this Secret only when `appservices.registrations` is set and `appservices.existingSecret` is empty. With `appservices.existingSecret`, use the name of that Secret instead.
+
+The bundled charts get the fixed names `matrix-hookshot` and `synapse-admin` by default, so both can run in one release without clashing.
+
+The chart was published as `tuwunel` up to 0.1.x. `nameOverride` still defaults to `tuwunel`, so the resource names and selector labels match that chart. When you move an existing release from the `tuwunel` chart to `matrix`, keep `fullnameOverride` as it was if you set it. The StatefulSet selector cannot change, and the data claim is named `<fullname>-data`, so both names must stay the same.
 
 ## Values
 
@@ -193,7 +214,7 @@ with the same provider name, bucket and `basePath`, and takes the keys from `med
 ### Run
 
 ```sh
-helm upgrade --install tuwunel charts/tuwunel -f values.yaml \
+helm upgrade --install tuwunel charts/matrix -f values.yaml \
   --set replicaCount=0 --set import.enabled=true
 kubectl logs -f job/<fullname>-import -c import
 ```
@@ -344,7 +365,7 @@ log and `verify.json`, and decide by hand whether every mismatch is one of the k
 Turn the import off and start the server:
 
 ```sh
-helm upgrade tuwunel charts/tuwunel -f values.yaml \
+helm upgrade tuwunel charts/matrix -f values.yaml \
   --set import.enabled=false --set replicaCount=1
 ```
 

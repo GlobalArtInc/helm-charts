@@ -1,5 +1,5 @@
 {{- define "tuwunel.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- default "tuwunel" .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "tuwunel.fullname" -}}

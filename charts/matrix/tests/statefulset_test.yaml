@@ -242,7 +242,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 097d6bd593dcf54bb3c02982ff159964eb6438c752063f86ea970e35cc99297c
+          value: efb35538fafa43342045b6dc8024747aefa360256018a2315577927cd5133a86
 
   - it: changes the config checksum when config changes
     release:
@@ -256,7 +256,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 47a3fa594c873baa6306fed79fcea7f5fee46bb097b22d9f3291139bb61a7793
+          value: feade0a469ed3c20e1be60610834e469d51db42327c4b384a963c3d195b78d35
 
   - it: turns off service links so Service variables do not reach the config reader
     release:
