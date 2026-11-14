@@ -1,0 +1,248 @@
+{{- if .Values.backup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tuwunel.fullname" . }}-backup
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+data:
+  backup.sh: |
+    #!/bin/sh
+    set -u
+
+    BACKUP_DIR="${BACKUP_DIR:?}"
+    S3_BUCKET="${S3_BUCKET:?}"
+    S3_PREFIX="${S3_PREFIX-}"
+    INTERVAL_SECONDS="${INTERVAL_SECONDS:?}"
+    INITIAL_DELAY_SECONDS="${INITIAL_DELAY_SECONDS:?}"
+    RETRY_SECONDS="${RETRY_SECONDS:?}"
+    STARTUP_WAIT_SECONDS="${STARTUP_WAIT_SECONDS:?}"
+    WAIT_SECONDS="${WAIT_SECONDS:?}"
+    SERVER_PORT="${SERVER_PORT:?}"
+    METRICS_PORT="${METRICS_PORT:?}"
+
+    METRICS_DIR=/metrics
+    METRICS_FILE="$METRICS_DIR/metrics"
+    POLL_SECONDS=5
+
+    if [ -n "$S3_PREFIX" ]; then
+      TARGET="DEST:$S3_BUCKET/$S3_PREFIX/db/"
+    else
+      TARGET="DEST:$S3_BUCKET/db/"
+    fi
+
+    log() {
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) backup: $*"
+    }
+
+    write_metrics() {
+      attempt=$1
+      success=$2
+      tmp="$METRICS_DIR/.metrics.tmp"
+      {
+        if [ -n "$attempt" ]; then
+          echo "# HELP tuwunel_backup_last_attempt_timestamp_seconds Unix time when the last backup attempt started."
+          echo "# TYPE tuwunel_backup_last_attempt_timestamp_seconds gauge"
+          echo "tuwunel_backup_last_attempt_timestamp_seconds $attempt"
+        fi
+        if [ -n "$success" ]; then
+          echo "# HELP tuwunel_backup_last_success_timestamp_seconds Unix time when the last backup was complete in S3."
+          echo "# TYPE tuwunel_backup_last_success_timestamp_seconds gauge"
+          echo "tuwunel_backup_last_success_timestamp_seconds $success"
+        fi
+      } > "$tmp" && mv "$tmp" "$METRICS_FILE"
+    }
+
+    last_success() {
+      sed -n 's/^tuwunel_backup_last_success_timestamp_seconds \([0-9][0-9]*\)$/\1/p' "$METRICS_FILE" | tail -n 1
+    }
+
+    max_number() {
+      best=
+      while read -r name; do
+        case "$name" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        if [ -z "$best" ] || [ "$name" -gt "$best" ]; then
+          best=$name
+        fi
+      done
+      echo "$best"
+    }
+
+    remote_latest_meta() {
+      if listing=$(rclone lsf "${TARGET}meta"); then
+        :
+      else
+        rc=$?
+        if [ "$rc" -ne 3 ]; then
+          return 1
+        fi
+        listing=
+      fi
+      printf '%s\n' "$listing" | max_number
+    }
+
+    rclone_write() {
+      rclone "$@" --immutable --transfers 4 --checksum --stats 0
+    }
+
+    wait_for_server() {
+      deadline=$(($(date +%s) + STARTUP_WAIT_SECONDS))
+      while :; do
+        if wget -q -T 5 -O /dev/null "http://127.0.0.1:$SERVER_PORT/_matrix/client/versions" 2>/dev/null; then
+          return 0
+        fi
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          return 1
+        fi
+        sleep "$POLL_SECONDS"
+      done
+    }
+
+    latest_meta() {
+      best=
+      for f in "$BACKUP_DIR"/meta/*; do
+        [ -e "$f" ] || continue
+        name=${f##*/}
+        case "$name" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        if [ -z "$best" ] || [ "$name" -gt "$best" ]; then
+          best=$name
+        fi
+      done
+      echo "$best"
+    }
+
+    tuwunel_pid() {
+      pids=$(pgrep -x tuwunel)
+      for pid in $pids; do
+        cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline") || continue
+        case "$cmd" in
+          *--health-check*) continue ;;
+        esac
+        echo "$pid"
+        return 0
+      done
+      return 1
+    }
+
+    create_backup() {
+      pid=$1
+      before=$2
+      log "sending SIGUSR2 to tuwunel pid $pid, newest backup before: ${before:-none}"
+      if ! kill -USR2 "$pid"; then
+        log "FAILED: could not signal pid $pid"
+        return 1
+      fi
+
+      created=
+      waited=0
+      while [ "$waited" -lt "$WAIT_SECONDS" ]; do
+        sleep "$POLL_SECONDS"
+        waited=$((waited + POLL_SECONDS))
+        found=$(latest_meta)
+        if [ -n "$found" ] && [ "$found" != "$before" ]; then
+          created=$found
+          break
+        fi
+      done
+      if [ -z "$created" ]; then
+        log "FAILED: no new file in $BACKUP_DIR/meta after ${WAIT_SECONDS}s, see the tuwunel container log"
+        return 1
+      fi
+      return 0
+    }
+
+    upload_backup() {
+      number=$1
+      log "backup $number is complete, uploading $BACKUP_DIR to $TARGET"
+      for dir in shared_checksum private meta; do
+        if ! rclone_write copy "$BACKUP_DIR/$dir" "${TARGET}$dir"; then
+          log "FAILED: rclone copy of $dir exited with an error, nothing was deleted"
+          return 1
+        fi
+      done
+      if ! rclone lsf "${TARGET}meta" | grep -qx "$number"; then
+        log "FAILED: meta/$number is not in $TARGET after the upload"
+        return 1
+      fi
+      if ! rclone_write sync "$BACKUP_DIR" "$TARGET" --delete-after --include "/shared_checksum/**" --include "/private/**" --include "/meta/**"; then
+        log "FAILED: cleanup of old backups in $TARGET exited with an error"
+        return 1
+      fi
+      log "backup $number is in $TARGET"
+      return 0
+    }
+
+    do_backup() {
+      pid=$1
+      local_latest=$(latest_meta)
+      if ! remote_latest=$(remote_latest_meta); then
+        log "FAILED: could not list ${TARGET}meta"
+        return 1
+      fi
+
+      if [ -n "$remote_latest" ] && { [ -z "$local_latest" ] || [ "$local_latest" -lt "$remote_latest" ]; }; then
+        log "FAILED: remote repository is ahead of the local one, refusing to create or upload backups (remote meta/$remote_latest, local meta/${local_latest:-none})"
+        return 1
+      fi
+
+      if [ -n "$local_latest" ] && { [ -z "$remote_latest" ] || [ "$local_latest" -gt "$remote_latest" ]; }; then
+        if [ -n "$remote_latest" ] && [ ! -f "$BACKUP_DIR/meta/$remote_latest" ]; then
+          log "FAILED: local repository does not contain the latest remote backup (meta/$remote_latest), refusing to sync because it would delete the remote history"
+          return 1
+        fi
+        log "unsynced local backup $local_latest (remote: ${remote_latest:-none}), uploading it without creating a new one"
+        upload_backup "$local_latest"
+        return
+      fi
+
+      if ! create_backup "$pid" "$local_latest"; then
+        return 1
+      fi
+      upload_backup "$created"
+    }
+
+    [ -f "$METRICS_FILE" ] || write_metrics "" "" || exit 1
+    rclone serve http "$METRICS_DIR" --addr ":$METRICS_PORT" --read-only --dir-cache-time 1s &
+    HTTP_PID=$!
+
+    skip_round=0
+    log "waiting up to ${STARTUP_WAIT_SECONDS}s for the server on port $SERVER_PORT"
+    if wait_for_server; then
+      log "the server answers"
+    else
+      log "the server did not answer within ${STARTUP_WAIT_SECONDS}s"
+      skip_round=1
+    fi
+
+    log "first backup in ${INITIAL_DELAY_SECONDS}s, then every ${INTERVAL_SECONDS}s, after a failure every ${RETRY_SECONDS}s"
+    sleep "$INITIAL_DELAY_SECONDS"
+
+    while :; do
+      if ! kill -0 "$HTTP_PID" 2>/dev/null; then
+        log "FATAL: the metrics server exited"
+        exit 1
+      fi
+
+      pause=$RETRY_SECONDS
+      if [ "$skip_round" -eq 1 ]; then
+        log "the server did not answer during startup, skipping this round"
+        skip_round=0
+      elif pid=$(tuwunel_pid); then
+        started=$(date +%s)
+        if do_backup "$pid"; then
+          write_metrics "$started" "$(date +%s)" || log "FAILED: could not write $METRICS_FILE"
+          pause=$INTERVAL_SECONDS
+        else
+          write_metrics "$started" "$(last_success)" || log "FAILED: could not write $METRICS_FILE"
+        fi
+      else
+        log "tuwunel process not found, skipping this round"
+      fi
+
+      sleep "$pause"
+    done
+{{- end }}

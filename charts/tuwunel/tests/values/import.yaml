@@ -1,0 +1,10 @@
+serverName: example.org
+replicaCount: 0
+import:
+  enabled: true
+  image:
+    tag: 1.9.4-test
+  synapseDb:
+    existingSecret: synapse-db
+  signingKey:
+    existingSecret: matrix-signing-key

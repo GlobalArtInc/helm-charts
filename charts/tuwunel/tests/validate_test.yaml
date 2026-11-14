@@ -1,0 +1,182 @@
+suite: validate
+templates:
+  - validate.yaml
+tests:
+  - it: renders nothing when the values are valid
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when serverName is empty
+    release:
+      name: tuwunel
+    set:
+      serverName: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "serverName is not set"
+
+  - it: refuses replicaCount above 1 before validate runs
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "value must be one of 0, 1"
+
+  - it: fails when import is enabled with a running server
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      replicaCount: 1
+      import:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "import.enabled is on and replicaCount is above 0"
+
+  - it: fails when route and ingress are both enabled
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+      ingress:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "route.enabled and ingress.enabled are both on"
+
+  - it: fails when S3 is on without the Secret for its keys
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      media:
+        s3:
+          enabled: true
+          bucket: matrix-tuwunel
+    asserts:
+      - failedTemplate:
+          errorPattern: "media.s3.existingSecret is not set"
+
+  - it: fails when appservices come from both a Secret and values
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      appservices:
+        existingSecret: matrix-appservices
+        registrations:
+          bridge:
+            id: bridge
+    asserts:
+      - failedTemplate:
+          errorPattern: "appservices.existingSecret and appservices.registrations are both set"
+
+  - it: fails when S3 is on without a bucket
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      media:
+        s3:
+          enabled: true
+          existingSecret: tuwunel-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "media.s3.bucket is not set"
+
+  - it: fails when the S3 provider name has a dot
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      media:
+        s3:
+          enabled: true
+          providerName: garage.eu
+          bucket: matrix-tuwunel
+          existingSecret: tuwunel-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "does not match pattern"
+
+  - it: fails when blockedPaths is set and ingress is off
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+      ingress:
+        blockedPaths:
+          - /_synapse/admin/v1/rooms/[^/]+/make_room_admin
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingress.blockedPaths is set and ingress.enabled is off"
+
+  - it: accepts an anchored blocked path that is a regular expression
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - ^/_synapse/admin/v1/rooms/[^/]+/make_room_admin$
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails on a blocked path that does not start with a slash and names its index
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - /_matrix/client/v3/sync
+          - "["
+    asserts:
+      - failedTemplate:
+          errorPattern: 'ingress\.blockedPaths\[1\]'
+
+  - it: fails on a blocked path with a space and names its index
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - "/_synapse/admin v1"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'ingress\.blockedPaths\[0\] is'
+
+  - it: fails on a blocked path that is not a valid regular expression
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - "/["
+    asserts:
+      - failedTemplate:
+          errorPattern: "error parsing regexp"

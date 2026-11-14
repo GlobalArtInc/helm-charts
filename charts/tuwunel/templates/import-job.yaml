@@ -1,0 +1,200 @@
+{{- if .Values.import.enabled }}
+{{- $fullname := include "tuwunel.fullname" . }}
+{{- $image := printf "%s:%s" .Values.import.image.repository .Values.import.image.tag }}
+{{- if .Values.import.image.digest }}
+{{- $image = printf "%s@%s" .Values.import.image.repository .Values.import.image.digest }}
+{{- end }}
+{{- $args := list "-c" "/etc/tuwunel-import/import.toml" "--import-synapse" "/work/homeserver.yaml" "--import-report" "/var/lib/tuwunel/import/report.json" }}
+{{- if .Values.import.verify }}
+{{- $args = concat $args (list "--import-verify" "--import-verify-report" "/var/lib/tuwunel/import/verify.json") }}
+{{- end }}
+{{- $args = concat $args .Values.import.extraArgs }}
+{{- $prepare := list "set -eu" "umask 077" "mkdir -p /var/lib/tuwunel/import" "cp /etc/tuwunel-import/homeserver.yaml /work/homeserver.yaml" }}
+{{- if .Values.import.bcryptPepper.existingSecret }}
+{{- $prepare = concat $prepare (list
+  `if [ -z "${BCRYPT_PEPPER:-}" ]; then echo "prepare: the bcrypt pepper in the Secret is empty" >&2; exit 1; fi`
+  `nl=$(printf '\nx'); nl=${nl%x}`
+  `cr=$(printf '\r')`
+  `case $BCRYPT_PEPPER in *"$nl"*|*"$cr"*) echo "prepare: the bcrypt pepper in the Secret contains a line break" >&2; exit 1 ;; esac`
+  `escaped=$(printf '%s' "$BCRYPT_PEPPER" | sed "s/'/''/g")`
+  `printf "password_config:\n  pepper: '%s'\n" "$escaped" >> /work/homeserver.yaml`) }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tuwunel.importName" . }}
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.import.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ printf "%s-import" (include "tuwunel.name" . | trunc 56 | trimSuffix "-") }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: import
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: prepare
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args: {{ list ($prepare | join "\n") | toJson }}
+          {{- with .Values.import.bcryptPepper.existingSecret }}
+          env:
+            - name: BCRYPT_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.import.bcryptPepper.key }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.import.prepare.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/tuwunel
+            - name: import-config
+              mountPath: /etc/tuwunel-import/homeserver.yaml
+              subPath: homeserver.yaml
+              readOnly: true
+            - name: work
+              mountPath: /work
+      {{- if .Values.import.media.fromS3.enabled }}
+      {{- $from := .Values.import.media.fromS3 }}
+      {{- $source := printf "SRC:%s" (trimAll "/" $from.bucket) }}
+      {{- with trimAll "/" $from.prefix }}
+      {{- $source = printf "%s/%s" $source . }}
+      {{- end }}
+        - name: fetch-media
+          image: {{ $from.image.repository }}:{{ $from.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["rclone"]
+          args: {{ list "copy" (printf "%s/local_content" $source) "/synapse-media/local_content" "--transfers" "16" "--checksum" | toJson }}
+          env:
+            - name: HOME
+              value: /tmp
+            - name: RCLONE_CONFIG_SRC_TYPE
+              value: s3
+            - name: RCLONE_CONFIG_SRC_PROVIDER
+              value: Other
+            - name: RCLONE_CONFIG_SRC_ENDPOINT
+              value: {{ $from.endpoint | quote }}
+            - name: RCLONE_CONFIG_SRC_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $from.existingSecret }}
+                  key: access-key
+            - name: RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $from.existingSecret }}
+                  key: secret-key
+          resources:
+            {{- toYaml $from.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: synapse-media
+              mountPath: /synapse-media
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
+      containers:
+        - name: import
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["tuwunel"]
+          args: {{ $args | toJson }}
+          env:
+            - name: TUWUNEL_SYNAPSE_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.import.synapseDb.existingSecret }}
+                  key: {{ .Values.import.synapseDb.key }}
+            {{- with .Values.import.bcryptPepper.existingSecret }}
+            - name: TUWUNEL_IMPORTED_BCRYPT_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.import.bcryptPepper.key }}
+            {{- end }}
+            {{- if .Values.media.s3.enabled }}
+            - name: TUWUNEL_STORAGE_PROVIDER__{{ upper .Values.media.s3.providerName }}__S3__KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.media.s3.existingSecret }}
+                  key: {{ .Values.media.s3.accessKeyKey }}
+            - name: TUWUNEL_STORAGE_PROVIDER__{{ upper .Values.media.s3.providerName }}__S3__SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.media.s3.existingSecret }}
+                  key: {{ .Values.media.s3.secretKeyKey }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.import.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/tuwunel
+            - name: import-config
+              mountPath: /etc/tuwunel-import/import.toml
+              subPath: import.toml
+              readOnly: true
+            - name: work
+              mountPath: /work
+              readOnly: true
+            - name: signing-key
+              mountPath: /etc/tuwunel-import/signing.key
+              subPath: {{ .Values.import.signingKey.key }}
+              readOnly: true
+            - name: synapse-media
+              mountPath: /synapse-media
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "tuwunel.pvcName" . }}
+        - name: import-config
+          secret:
+            secretName: {{ include "tuwunel.importName" . }}
+        - name: signing-key
+          secret:
+            secretName: {{ .Values.import.signingKey.existingSecret }}
+            defaultMode: 256
+        - name: synapse-media
+          emptyDir:
+            sizeLimit: {{ .Values.import.media.emptyDirSizeLimit }}
+        - name: work
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir: {}
+{{- end }}

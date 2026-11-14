@@ -1,0 +1,387 @@
+suite: backup
+templates:
+  - configmap-backup.yaml
+  - validate-backup.yaml
+tests:
+  - it: renders nothing by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the script ConfigMap that signals the server and uploads with rclone
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: tuwunel-backup
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'kill -USR2'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'tuwunel_backup_last_success_timestamp_seconds'
+      - notMatchRegex:
+          path: data["backup.sh"]
+          pattern: 'ACCESS_KEY|SECRET'
+
+  - it: makes every rclone write immutable and never writes to S3 around the wrapper
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'rclone "\$@" --immutable'
+      - notMatchRegex:
+          path: data["backup.sh"]
+          pattern: '(?m)^\s*(if ! )?rclone (copy|sync|move|delete|purge|rcat|copyto|moveto)'
+
+  - it: uploads the files first, meta last, and cleans up in one sync at the end
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'for dir in shared_checksum private meta; do\n\s*if ! rclone_write copy "\$BACKUP_DIR/\$dir" "\$\{TARGET\}\$dir"'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)rclone_write copy.*grep -qx "\$number".*rclone_write sync "\$BACKUP_DIR" "\$TARGET" --delete-after --include "/shared_checksum/\*\*" --include "/private/\*\*" --include "/meta/\*\*"'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)grep -qx "\$number".*write_metrics "\$started" "\$\(date'
+
+  - it: refuses to create or upload anything when the remote repository is ahead of the local one
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'remote_latest=\$\(remote_latest_meta\)'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '\[ -n "\$remote_latest" \] && \{ \[ -z "\$local_latest" \] \|\| \[ "\$local_latest" -lt "\$remote_latest" \]; \}'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'remote repository is ahead of the local one, refusing to create or upload backups'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)remote_latest=\$\(remote_latest_meta\).*remote repository is ahead.*create_backup "\$pid"'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)remote repository is ahead of the local one[^\n]*\n\s*return 1\n'
+      - notMatchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)kill -USR2.*kill -USR2'
+
+  - it: refuses to upload an unsynced backup when the local repository lost the latest remote one
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '\[ -n "\$remote_latest" \] && \[ ! -f "\$BACKUP_DIR/meta/\$remote_latest" \]'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'local repository does not contain the latest remote backup \(meta/\$remote_latest\), refusing to sync because it would delete the remote history'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)refusing to sync because it would delete the remote history"\n\s*return 1\n\s*fi\n\s*log "unsynced local backup'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)\[ "\$local_latest" -gt "\$remote_latest" \]; \}; then\n\s*if \[ -n "\$remote_latest" \] && \[ ! -f.*refusing to sync.*upload_backup "\$local_latest"'
+
+  - it: signals the server only when there is no unsynced local backup
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '\[ -n "\$local_latest" \] && \{ \[ -z "\$remote_latest" \] \|\| \[ "\$local_latest" -gt "\$remote_latest" \]; \}'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)unsynced local backup.*uploading it without creating a new one"\n\s*upload_backup "\$local_latest"\n\s*return\n'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)upload_backup "\$local_latest"\n\s*return\n\s*fi\n\n\s*if ! create_backup "\$pid" "\$local_latest"; then\n\s*return 1\n\s*fi\n\s*upload_backup "\$created"'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'FAILED: could not list \$\{TARGET\}meta'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)create_backup\(\) \{.*kill -USR2 "\$pid".*upload_backup\(\) \{'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'WAIT_SECONDS="\$\{WAIT_SECONDS:\?\}"'
+      - notMatchRegex:
+          path: data["backup.sh"]
+          pattern: '(?m)^\s*WAIT_SECONDS=[0-9]'
+
+  - it: retries after a failure sooner and waits for the server before the first round
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'pause=\$RETRY_SECONDS'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'pause=\$INTERVAL_SECONDS'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'wget -q -T 5 -O /dev/null "http://127.0.0.1:\$SERVER_PORT/_matrix/client/versions" 2>/dev/null'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: '(?s)if wait_for_server; then.*sleep "\$INITIAL_DELAY_SECONDS"'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'the server did not answer during startup, skipping this round'
+
+  - it: renders no validate output when the backup values are complete
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails without backup.s3.endpoint
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "backup.s3.endpoint is not set"
+
+  - it: fails without backup.s3.bucket
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "backup.s3.bucket is not set"
+
+  - it: fails without backup.s3.existingSecret
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+    asserts:
+      - failedTemplate:
+          errorPattern: "backup.s3.existingSecret is not set"
+
+  - it: fails when persistence is off
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      persistence:
+        enabled: false
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "persistence.enabled is off"
+
+  - it: fails when replicaCount is 0
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      replicaCount: 0
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "replicaCount is 0"
+
+  - it: fails when backup.path is outside the data volume
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        path: /var/lib/tuwunel
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "backup.path is"
+
+  - it: fails when backup.path ends with a slash
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        path: /var/lib/tuwunel/backup/
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "must not end with /"
+
+  - it: fails when backup.path has a .. segment
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        path: /var/lib/tuwunel/../backup
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "must not contain a \\.\\. segment"
+
+  - it: accepts a dotted name that is not a .. segment
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        path: /var/lib/tuwunel/backup..old
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: tells the operator to turn the backup off during an import when replicaCount is 0
+    template: validate-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      replicaCount: 0
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - failedTemplate:
+          errorPattern: "turn backup.enabled off for the time of the import"

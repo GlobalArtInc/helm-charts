@@ -1,0 +1,116 @@
+suite: route
+templates:
+  - route.yaml
+tests:
+  - it: does not render when route is disabled
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: false
+        host: matrix.example.org
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sends /_matrix and /_synapse/admin to the Service
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+        host: matrix.example.org
+        gateway:
+          name: moscow-gateway
+          namespace: envoy-gateway-system
+    asserts:
+      - isKind:
+          of: HTTPRoute
+      - equal:
+          path: spec.hostnames[0]
+          value: matrix.example.org
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /_matrix
+      - equal:
+          path: spec.rules[0].matches[1].path.value
+          value: /_synapse/admin
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: tuwunel
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8008
+
+  - it: attaches directly to the named Gateway when the ListenerSet is off
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+        host: matrix.example.org
+        gateway:
+          name: moscow-gateway
+          namespace: envoy-gateway-system
+          sectionName: https
+    asserts:
+      - equal:
+          path: spec.parentRefs[0].kind
+          value: Gateway
+      - equal:
+          path: spec.parentRefs[0].name
+          value: moscow-gateway
+      - equal:
+          path: spec.parentRefs[0].namespace
+          value: envoy-gateway-system
+      - equal:
+          path: spec.parentRefs[0].sectionName
+          value: https
+
+  - it: attaches to an existing ListenerSet and creates none of its own
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+        host: matrix.example.org
+        gateway:
+          name: moscow-gateway
+          namespace: envoy-gateway-system
+        listenerSet:
+          enabled: true
+          attachTo: moscow-listeners
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.parentRefs[0].kind
+          value: ListenerSet
+      - equal:
+          path: spec.parentRefs[0].name
+          value: moscow-listeners
+
+  - it: orders the certificate from the issuer named in values
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      route:
+        enabled: true
+        host: matrix.example.org
+        gateway:
+          name: moscow-gateway
+          namespace: envoy-gateway-system
+        tls:
+          certificate:
+            enabled: true
+            issuer: internal-ca
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.issuerRef.name
+          value: internal-ca

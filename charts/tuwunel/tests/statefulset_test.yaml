@@ -1,0 +1,543 @@
+suite: statefulset
+templates:
+  - statefulset.yaml
+  - secret-config.yaml
+  - secret-appservices.yaml
+  - configmap-backup.yaml
+tests:
+  - it: runs one replica by default with ordered pods and rolling updates
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        isKind:
+          of: StatefulSet
+      - template: statefulset.yaml
+        equal:
+          path: spec.replicas
+          value: 1
+      - template: statefulset.yaml
+        equal:
+          path: spec.serviceName
+          value: tuwunel
+      - template: statefulset.yaml
+        equal:
+          path: spec.podManagementPolicy
+          value: OrderedReady
+      - template: statefulset.yaml
+        equal:
+          path: spec.updateStrategy.type
+          value: RollingUpdate
+
+  - it: takes the replica count from replicaCount
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      replicaCount: 0
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.replicas
+          value: 0
+
+  - it: mounts the config file over the path the server reads
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/tuwunel/tuwunel.toml
+            subPath: tuwunel.toml
+            readOnly: true
+
+  - it: mounts the data claim by name at the database path
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/tuwunel
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: tuwunel-data
+
+  - it: uses the existing claim when one is given
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      persistence:
+        existingClaim: restored-data
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: restored-data
+
+  - it: uses an emptyDir for the database when persistence is disabled
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      persistence:
+        enabled: false
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+
+  - it: mounts the appservices Secret when appservices are configured
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      appservices:
+        existingSecret: matrix-appservices
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: appservices
+            mountPath: /etc/tuwunel/appservices
+            readOnly: true
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: appservices
+            secret:
+              secretName: matrix-appservices
+
+  - it: runs with a restricted security context by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: runs the health check as the startup probe with its budget
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value: ["tuwunel", "--health-check"]
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 180
+
+  - it: passes the S3 keys to the container from the Secret when S3 is enabled
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      media:
+        s3:
+          enabled: true
+          bucket: matrix-tuwunel
+          existingSecret: tuwunel-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TUWUNEL_STORAGE_PROVIDER__S3__S3__KEY
+            valueFrom:
+              secretKeyRef:
+                name: tuwunel-s3
+                key: access-key
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TUWUNEL_STORAGE_PROVIDER__S3__S3__SECRET
+            valueFrom:
+              secretKeyRef:
+                name: tuwunel-s3
+                key: secret-key
+
+  - it: points the server at the config file and sets no S3 keys by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: TUWUNEL_CONFIG
+              value: /etc/tuwunel/tuwunel.toml
+
+  - it: takes the liveness and readiness commands from values
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      probes:
+        liveness:
+          command: ["curl", "-fsS", "http://127.0.0.1:8008/"]
+        readiness:
+          command: ["curl", "-fsS", "http://127.0.0.1:8008/"]
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value: ["curl", "-fsS", "http://127.0.0.1:8008/"]
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value: ["curl", "-fsS", "http://127.0.0.1:8008/"]
+
+  - it: changes the config checksum with the default config
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: bc57a8b7e06f8d72f4145a3b2ec5df53fe325e8f269175dbdc5aa644dd681bde
+
+  - it: changes the config checksum when config changes
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      config:
+        federation:
+          enable: false
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: a608dd30a510cfec9c4b3c33ec5c86c6d8f863b21fd0e01894f2f5ded806e96b
+
+  - it: turns off service links so Service variables do not reach the config reader
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+
+  - it: does not mount a service account token and pulls the image only when missing
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: passes imagePullSecrets to the pod when set
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      imagePullSecrets:
+        - name: registry-credentials
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: registry-credentials
+
+  - it: takes the probe timeouts from values and defaults them to 15 seconds
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 15
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 15
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 15
+
+  - it: has one container and no shared process namespace without backup
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - template: statefulset.yaml
+        notExists:
+          path: spec.template.spec.shareProcessNamespace
+      - template: statefulset.yaml
+        notExists:
+          path: spec.template.metadata.annotations["checksum/backup"]
+
+  - it: adds the backup sidecar and shares the process namespace when backup is on
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.shareProcessNamespace
+          value: true
+      - template: statefulset.yaml
+        lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[1].name
+          value: backup
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[1].image
+          value: docker.io/rclone/rclone:1.75.2
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: metrics
+            containerPort: 9101
+            protocol: TCP
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/tuwunel
+            readOnly: true
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: backup-tmp
+            mountPath: /tmp
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: backup-tmp
+            emptyDir: {}
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[1].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: backup-metrics
+            mountPath: /metrics
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[1].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: backup-script
+            configMap:
+              name: tuwunel-backup
+      - template: statefulset.yaml
+        exists:
+          path: spec.template.metadata.annotations["checksum/backup"]
+
+  - it: gives the sidecar the retry, startup wait, round wait and server port
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      service:
+        port: 8123
+      backup:
+        enabled: true
+        retrySeconds: 120
+        startupWaitSeconds: 300
+        waitSeconds: 900
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: RETRY_SECONDS
+            value: "120"
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: STARTUP_WAIT_SECONDS
+            value: "300"
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: WAIT_SECONDS
+            value: "900"
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SERVER_PORT
+            value: "8123"
+
+  - it: waits 1800 seconds for a new backup by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: WAIT_SECONDS
+            value: "1800"
+
+  - it: fails when backup.waitSeconds is 0
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        waitSeconds: 0
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        failedTemplate:
+          errorPattern: "waitSeconds"
+
+  - it: gives the sidecar the S3 keys only through secretKeyRef
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: RCLONE_CONFIG_DEST_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: backup-s3
+                key: access-key
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: RCLONE_CONFIG_DEST_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: backup-s3
+                key: secret-key
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: RCLONE_CONFIG_DEST_ENDPOINT
+            value: https://s3.example.org
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[1].command
+          value: ["/bin/sh", "/scripts/backup.sh"]

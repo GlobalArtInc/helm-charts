@@ -1,0 +1,37 @@
+suite: service blocked
+templates:
+  - service-blocked.yaml
+tests:
+  - it: renders a Service without selector when blockedPaths is set
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - /_synapse/admin/v1/rooms/[^/]+/make_room_admin
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: tuwunel-blocked
+      - notExists:
+          path: spec.selector
+      - equal:
+          path: spec.ports[0].port
+          value: 8008
+
+  - it: does not render without blockedPaths
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+    asserts:
+      - hasDocuments:
+          count: 0

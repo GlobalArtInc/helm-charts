@@ -1,0 +1,47 @@
+serverName: example.org
+
+image:
+  repository: ghcr.io/globalartinc/tuwunel
+  tag: 2.0.0-bcrypt-420d753
+
+persistence:
+  storageClass: ceph-csi-rbd
+
+media:
+  s3:
+    enabled: true
+    endpoint: https://s3.example.org
+    bucket: matrix-tuwunel
+    existingSecret: tuwunel-s3
+
+appservices:
+  existingSecret: matrix-appservices
+
+config:
+  federation:
+    enable: false
+  http:
+    max_request_size: 512 MiB
+  rooms:
+    default_version: "11"
+    forget_forced_upon_leave: true
+    relations:
+      bundle_edits: true
+      bundle_references: true
+  rate_limiting:
+    login:
+      account:
+        per_second: 0
+        burst_count: 0
+      address:
+        per_second: 0
+        burst_count: 0
+      failed:
+        per_second: 0
+        burst_count: 0
+  registration:
+    enable: false
+    guests:
+      enable: false
+  media:
+    allow_legacy: true

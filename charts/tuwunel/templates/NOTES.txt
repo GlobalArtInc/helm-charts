@@ -1,0 +1,9 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as {{ .Release.Name }}, serving {{ .Values.serverName }}.
+
+Check that the pod is running:
+
+  kubectl get pods,pvc -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Inside the cluster the homeserver is reachable at:
+
+  http://{{ include "tuwunel.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}

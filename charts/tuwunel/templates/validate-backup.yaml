@@ -1,0 +1,23 @@
+{{- if .Values.backup.enabled -}}
+{{- if not .Values.backup.s3.endpoint -}}
+{{- fail "backup.enabled is on and backup.s3.endpoint is not set. The sidecar copies the backups to S3 and needs the endpoint URL, for example https://s3.example.org." -}}
+{{- end -}}
+{{- if not .Values.backup.s3.bucket -}}
+{{- fail "backup.enabled is on and backup.s3.bucket is not set. Name the bucket that receives the backups." -}}
+{{- end -}}
+{{- if not .Values.backup.s3.existingSecret -}}
+{{- fail "backup.enabled is on and backup.s3.existingSecret is not set. The S3 keys reach the sidecar from that Secret, under the keys access-key and secret-key. Name the Secret that holds them." -}}
+{{- end -}}
+{{- if not .Values.persistence.enabled -}}
+{{- fail "backup.enabled is on and persistence.enabled is off. The database would live in an emptyDir that disappears with the pod, and the backup repository with it. Turn persistence on or turn the backup off." -}}
+{{- end -}}
+{{- if eq (int .Values.replicaCount) 0 -}}
+{{- fail "backup.enabled is on and replicaCount is 0. With no pod there is no sidecar and no backup, and the metric would go stale. Set replicaCount to 1, or turn backup.enabled off while the server is stopped. During an import replicaCount has to be 0, so turn backup.enabled off for the time of the import." -}}
+{{- end -}}
+{{- if not (hasPrefix "/var/lib/tuwunel/" .Values.backup.path) -}}
+{{- fail (printf "backup.path is %q. The repository has to be inside the data volume, under /var/lib/tuwunel/, so that it survives a restart and the sidecar can read it." .Values.backup.path) -}}
+{{- end -}}
+{{- if or (hasSuffix "/" .Values.backup.path) (regexMatch "(^|/)\\.\\.(/|$)" .Values.backup.path) -}}
+{{- fail (printf "backup.path is %q. It must not end with / and must not contain a .. segment: the sidecar and the server have to agree on one exact directory inside the data volume." .Values.backup.path) -}}
+{{- end -}}
+{{- end -}}

@@ -1,0 +1,25 @@
+{{- if .Values.import.enabled }}
+{{- if and (not .Values.import.image.tag) (not .Values.import.image.digest) }}
+{{- fail "import.enabled is on and neither import.image.tag nor import.image.digest is set. The import needs the Tuwunel fork with the --import-synapse flag, and there is no default version. Set one of them." }}
+{{- end }}
+{{- if not .Values.import.synapseDb.existingSecret }}
+{{- fail "import.enabled is on and import.synapseDb.existingSecret is not set. The Synapse database URL reaches the Job from that Secret, never through values. Name the Secret that holds it." }}
+{{- end }}
+{{- if not .Values.import.signingKey.existingSecret }}
+{{- fail "import.enabled is on and import.signingKey.existingSecret is not set. The server keeps the Synapse signing key so other servers go on trusting it. Name the Secret that holds the key." }}
+{{- end }}
+{{- if not .Values.persistence.enabled }}
+{{- fail "import.enabled is on and persistence.enabled is off. The import writes the whole database, and on an emptyDir it would be lost when the Job ends. Turn persistence.enabled on." }}
+{{- end }}
+{{- if .Values.import.media.fromS3.enabled }}
+{{- if not .Values.import.media.fromS3.endpoint }}
+{{- fail "import.media.fromS3.enabled is on and import.media.fromS3.endpoint is not set. Name the S3 endpoint of the Synapse media bucket." }}
+{{- end }}
+{{- if not .Values.import.media.fromS3.bucket }}
+{{- fail "import.media.fromS3.enabled is on and import.media.fromS3.bucket is not set. Name the bucket that holds the Synapse media." }}
+{{- end }}
+{{- if not .Values.import.media.fromS3.existingSecret }}
+{{- fail "import.media.fromS3.enabled is on and import.media.fromS3.existingSecret is not set. The access-key and secret-key for the Synapse media bucket reach the Job from that Secret. Name it." }}
+{{- end }}
+{{- end }}
+{{- end }}

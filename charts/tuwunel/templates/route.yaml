@@ -1,0 +1,105 @@
+{{- if .Values.route.enabled }}
+{{- if .Values.route.tls.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "tuwunel.route.tlsSecretName" . }}
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "tuwunel.route.tlsSecretName" . }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ required "route.tls.certificate.issuer is not set. Name the ClusterIssuer that orders the certificate." .Values.route.tls.certificate.issuer }}
+  commonName: {{ include "tuwunel.route.host" . }}
+  dnsNames:
+    - {{ include "tuwunel.route.host" . }}
+---
+{{- end }}
+{{- if .Values.route.tls.referenceGrant.enabled }}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ printf "%s-tls-read" (include "tuwunel.fullname" .) }}
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: {{ include "tuwunel.route.gatewayNamespace" . }}
+  to:
+    - group: ''
+      kind: Secret
+      name: {{ include "tuwunel.route.tlsSecretName" . }}
+---
+{{- end }}
+{{- if and .Values.route.listenerSet.enabled (not .Values.route.listenerSet.attachTo) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: {{ include "tuwunel.fullname" . }}-listeners
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  parentRef:
+    name: {{ include "tuwunel.route.gatewayName" . }}
+    namespace: {{ include "tuwunel.route.gatewayNamespace" . }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      hostname: {{ include "tuwunel.route.host" . }}
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ include "tuwunel.route.tlsSecretName" . }}
+            {{- with .Values.route.tls.secretNamespace }}
+            namespace: {{ . }}
+            {{- end }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "tuwunel.fullname" . }}-route
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    {{- if .Values.route.listenerSet.attachTo }}
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ .Values.route.listenerSet.attachTo }}
+    {{- else if .Values.route.listenerSet.enabled }}
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "tuwunel.fullname" . }}-listeners
+      sectionName: https
+    {{- else }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ include "tuwunel.route.gatewayName" . }}
+      namespace: {{ include "tuwunel.route.gatewayNamespace" . }}
+      {{- with .Values.route.gateway.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+    {{- end }}
+  hostnames:
+    - {{ include "tuwunel.route.host" . }}
+  rules:
+    - matches:
+        {{- range (include "tuwunel.paths" . | fromYamlArray) }}
+        - path:
+            type: PathPrefix
+            value: {{ . }}
+        {{- end }}
+      backendRefs:
+        - name: {{ include "tuwunel.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }}

@@ -1,0 +1,33 @@
+suite: service
+templates:
+  - service.yaml
+tests:
+  - it: exposes 8008 by default and points at the http port
+    release:
+      name: tuwunel
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: tuwunel
+      - equal:
+          path: spec.ports[0].port
+          value: 8008
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http
+
+  - it: takes the port from service.port
+    release:
+      name: tuwunel
+    set:
+      service:
+        port: 9000
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9000
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http

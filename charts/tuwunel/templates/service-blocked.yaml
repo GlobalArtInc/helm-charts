@@ -1,0 +1,15 @@
+{{- if and .Values.ingress.enabled .Values.ingress.blockedPaths }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tuwunel.fullname" . }}-blocked
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+{{- end }}

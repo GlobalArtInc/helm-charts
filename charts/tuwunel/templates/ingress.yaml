@@ -1,0 +1,71 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := include "tuwunel.ingress.host" . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "tuwunel.fullname" . }}
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          {{- range (include "tuwunel.paths" . | fromYamlArray) }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "tuwunel.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+          {{- range .Values.ingress.extraPaths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ .service | default (include "tuwunel.fullname" $) }}
+                port:
+                  number: {{ .port | default $.Values.service.port }}
+          {{- end }}
+{{- range $index, $path := .Values.ingress.blockedPaths }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "tuwunel.fullname" $ }}-blocked-{{ $index }}
+  labels:
+    {{- include "tuwunel.labels" $ | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  {{- with $.Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: {{ $path | quote }}
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "tuwunel.fullname" $ }}-blocked
+                port:
+                  number: {{ $.Values.service.port }}
+{{- end }}
+{{- end }}

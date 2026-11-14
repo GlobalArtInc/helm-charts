@@ -1,0 +1,52 @@
+suite: pvc
+templates:
+  - pvc.yaml
+tests:
+  - it: renders the data claim with the keep policy
+    release:
+      name: tuwunel
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: tuwunel-data
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: spec.resources.requests.storage
+          value: 20Gi
+      - notExists:
+          path: spec.storageClassName
+
+  - it: does not render when persistence is disabled
+    release:
+      name: tuwunel
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when an existing claim is given
+    release:
+      name: tuwunel
+    set:
+      persistence:
+        existingClaim: restored-data
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sets storageClassName when one is given
+    release:
+      name: tuwunel
+    set:
+      persistence:
+        storageClass: ceph-csi-rbd
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: ceph-csi-rbd

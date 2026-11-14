@@ -1,0 +1,134 @@
+suite: ingress
+templates:
+  - ingress.yaml
+tests:
+  - it: does not render when ingress is disabled
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: false
+        host: matrix.example.org
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: publishes /_matrix and /_synapse/admin to the Service
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.name
+          value: tuwunel
+      - equal:
+          path: spec.rules[0].host
+          value: matrix.example.org
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /_matrix
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /_synapse/admin
+      - equal:
+          path: spec.rules[0].http.paths[1].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: tuwunel
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8008
+
+  - it: appends extraPaths and sends them to the Service unless told otherwise
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        extraPaths:
+          - path: /_extra
+            pathType: Exact
+          - path: /other
+            pathType: Prefix
+            service: other-svc
+            port: 9000
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: /_extra
+      - equal:
+          path: spec.rules[0].http.paths[2].backend.service.name
+          value: tuwunel
+      - equal:
+          path: spec.rules[0].http.paths[2].backend.service.port.number
+          value: 8008
+      - equal:
+          path: spec.rules[0].http.paths[3].backend.service.name
+          value: other-svc
+      - equal:
+          path: spec.rules[0].http.paths[3].backend.service.port.number
+          value: 9000
+
+  - it: gives each blocked regex its own Ingress with use-regex
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      ingress:
+        enabled: true
+        host: matrix.example.org
+        blockedPaths:
+          - /_synapse/admin/v1/rooms/[^/]+/make_room_admin
+          - ^/_synapse/admin/v1/users/[^/]+/shadow_ban$
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: tuwunel-blocked-0
+      - documentIndex: 1
+        equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/use-regex"]
+          value: "true"
+      - documentIndex: 1
+        equal:
+          path: spec.rules[0].host
+          value: matrix.example.org
+      - documentIndex: 1
+        equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /_synapse/admin/v1/rooms/[^/]+/make_room_admin
+      - documentIndex: 1
+        equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: ImplementationSpecific
+      - documentIndex: 1
+        equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: tuwunel-blocked
+      - documentIndex: 2
+        equal:
+          path: metadata.name
+          value: tuwunel-blocked-1
+      - documentIndex: 2
+        equal:
+          path: spec.rules[0].http.paths[0].path
+          value: ^/_synapse/admin/v1/users/[^/]+/shadow_ban$
+      - documentIndex: 2
+        equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: tuwunel-blocked

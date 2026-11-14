@@ -1,0 +1,33 @@
+serverName: example.org
+
+replicaCount: 0
+
+persistence:
+  storageClass: ceph-csi-rbd
+
+media:
+  s3:
+    enabled: true
+    endpoint: https://s3.example.org
+    bucket: matrix-tuwunel
+    existingSecret: tuwunel-s3
+
+import:
+  enabled: true
+  image:
+    repository: ghcr.io/globalartinc/tuwunel-synapse-import
+    tag: 1.9.4-fe53f16
+  synapseDb:
+    existingSecret: synapse-db
+    key: uri
+  signingKey:
+    existingSecret: matrix-signing-key
+    key: signing.key
+  bcryptPepper:
+    existingSecret: synapse-pepper
+  media:
+    fromS3:
+      enabled: true
+      endpoint: https://s3.example.org
+      bucket: matrix
+      existingSecret: synapse-media-s3

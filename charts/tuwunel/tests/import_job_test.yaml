@@ -1,0 +1,610 @@
+suite: import job
+templates:
+  - import-job.yaml
+  - secret-import.yaml
+  - validate-import.yaml
+release:
+  name: tuwunel
+tests:
+  - it: renders no Job, Secret or failure by default
+    set:
+      serverName: example.org
+    asserts:
+      - template: import-job.yaml
+        hasDocuments:
+          count: 0
+      - template: secret-import.yaml
+        hasDocuments:
+          count: 0
+      - template: validate-import.yaml
+        hasDocuments:
+          count: 0
+
+  - it: makes a Job that runs once, with no service links and no API token
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        isKind:
+          of: Job
+      - template: import-job.yaml
+        equal:
+          path: metadata.name
+          value: tuwunel-import
+      - template: import-job.yaml
+        equal:
+          path: spec.backoffLimit
+          value: 0
+      - template: import-job.yaml
+        equal:
+          path: spec.activeDeadlineSeconds
+          value: 3600
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: keeps the pod out of the Service selector
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: tuwunel-import
+
+  - it: runs the importer with a report and the verification by default
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/globalartinc/tuwunel-synapse-import:1.9.4-test
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].command
+          value: ["tuwunel"]
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - -c
+            - /etc/tuwunel-import/import.toml
+            - --import-synapse
+            - /work/homeserver.yaml
+            - --import-report
+            - /var/lib/tuwunel/import/report.json
+            - --import-verify
+            - --import-verify-report
+            - /var/lib/tuwunel/import/verify.json
+
+  - it: drops the verification and appends extraArgs, and prefers the digest
+    values:
+      - values/import.yaml
+    set:
+      import:
+        verify: false
+        extraArgs:
+          - --import-resume
+        image:
+          digest: sha256:0123456789abcdef
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - -c
+            - /etc/tuwunel-import/import.toml
+            - --import-synapse
+            - /work/homeserver.yaml
+            - --import-report
+            - /var/lib/tuwunel/import/report.json
+            - --import-resume
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/globalartinc/tuwunel-synapse-import@sha256:0123456789abcdef
+
+  - it: takes the Synapse database URL and the pepper from Secrets, and no S3 keys without media.s3
+    values:
+      - values/import.yaml
+    set:
+      import:
+        bcryptPepper:
+          existingSecret: synapse-pepper
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: TUWUNEL_SYNAPSE_DB
+              valueFrom:
+                secretKeyRef:
+                  name: synapse-db
+                  key: uri
+            - name: TUWUNEL_IMPORTED_BCRYPT_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: synapse-pepper
+                  key: pepper
+
+  - it: gives the importer the S3 keys of the runtime provider from the Secret
+    values:
+      - values/import.yaml
+    set:
+      media:
+        s3:
+          enabled: true
+          bucket: matrix-tuwunel
+          existingSecret: tuwunel-s3
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TUWUNEL_STORAGE_PROVIDER__S3__S3__KEY
+            valueFrom:
+              secretKeyRef:
+                name: tuwunel-s3
+                key: access-key
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TUWUNEL_STORAGE_PROVIDER__S3__S3__SECRET
+            valueFrom:
+              secretKeyRef:
+                name: tuwunel-s3
+                key: secret-key
+
+  - it: mounts the signing key as a file readable by the owner only
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: signing-key
+            mountPath: /etc/tuwunel-import/signing.key
+            subPath: signing.key
+            readOnly: true
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: signing-key
+            secret:
+              secretName: matrix-signing-key
+              defaultMode: 256
+
+  - it: gives the prepare initContainer small resources by default
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+
+  - it: takes the prepare resources from import.prepare.resources
+    values:
+      - values/import.yaml
+    set:
+      import:
+        prepare:
+          resources:
+            limits:
+              memory: 256Mi
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 256Mi
+
+  - it: has only the prepare initContainer unless media is fetched from S3
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare
+
+  - it: prepares the report directory with the importer image and the same securityContext
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].image
+          value: ghcr.io/globalartinc/tuwunel-synapse-import:1.9.4-test
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].command
+          value: ["sh", "-c"]
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '(?m)^mkdir -p /var/lib/tuwunel/import$'
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/tuwunel
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: work
+            mountPath: /work
+
+  - it: runs prepare before fetch-media
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].name
+          value: prepare
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].name
+          value: fetch-media
+
+  - it: copies homeserver.yaml as it is and passes no pepper without bcryptPepper
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '(?m)^cp /etc/tuwunel-import/homeserver.yaml /work/homeserver.yaml$'
+      - template: import-job.yaml
+        notMatchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'password_config|BCRYPT_PEPPER'
+      - template: import-job.yaml
+        notExists:
+          path: spec.template.spec.initContainers[0].env
+
+  - it: appends the pepper from an env var with quotes doubled, and never puts the value in args or the Secret
+    values:
+      - values/import.yaml
+    set:
+      import:
+        bcryptPepper:
+          existingSecret: synapse-pepper
+          key: pep
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[0].env
+          value:
+            - name: BCRYPT_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: synapse-pepper
+                  key: pep
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: "sed \"s/'/''/g\""
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'password_config:\\n  pepper: .*>> /work/homeserver.yaml'
+      - template: import-job.yaml
+        lengthEqual:
+          path: spec.template.spec.initContainers[0].args
+          count: 1
+      - template: secret-import.yaml
+        notMatchRegex:
+          path: stringData["homeserver.yaml"]
+          pattern: 'password_config|pepper'
+
+  - it: reads homeserver.yaml from the work directory and mounts it and the Synapse media read-only
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: work
+            mountPath: /work
+            readOnly: true
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: synapse-media
+            mountPath: /synapse-media
+            readOnly: true
+      - template: import-job.yaml
+        notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: import-config
+            mountPath: /etc/tuwunel-import/homeserver.yaml
+            subPath: homeserver.yaml
+            readOnly: true
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: work
+            emptyDir:
+              medium: Memory
+              sizeLimit: 1Mi
+
+  - it: keeps the Job and Secret names and the pod label within 63 characters
+    values:
+      - values/import.yaml
+    set:
+      fullnameOverride: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij-x
+      nameOverride: abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij-x
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: metadata.name
+          pattern: '^[a-z0-9-]{1,63}$'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          pattern: '^[a-z0-9-]{1,63}$'
+      - template: secret-import.yaml
+        matchRegex:
+          path: metadata.name
+          pattern: '^[a-z0-9-]{1,63}$'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.volumes[1].secret.secretName
+          pattern: '^[a-z0-9-]{1,63}$'
+
+  - it: fetches the media with rclone, keys from a Secret, when fromS3 is on
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+            prefix: /synapse/
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].image
+          value: docker.io/rclone/rclone:1.75.2
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].args
+          value:
+            - copy
+            - SRC:matrix/synapse/local_content
+            - /synapse-media/local_content
+            - --transfers
+            - "16"
+            - --checksum
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: synapse-media-s3
+                key: secret-key
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.initContainers[1].env
+          content:
+            name: RCLONE_CONFIG_SRC_ENDPOINT
+            value: https://s3.example.org
+
+  - it: copies from the bucket root when the prefix is empty
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].args[1]
+          value: SRC:matrix/local_content
+
+  - it: writes a homeserver.yaml without appservice registrations
+    values:
+      - values/import.yaml
+    asserts:
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["homeserver.yaml"]
+          pattern: "(?m)^app_service_config_files: \\[\\]$"
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["homeserver.yaml"]
+          pattern: "(?m)^media_store_path: /synapse-media$"
+
+  - it: writes the flat import.toml without a storage provider when media.s3 is off
+    values:
+      - values/import.yaml
+    asserts:
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?m)^\s*signing_key_path = "/etc/tuwunel-import/signing.key"$'
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?m)^\s*allow_federation = false$'
+      - template: secret-import.yaml
+        notMatchRegex:
+          path: stringData["import.toml"]
+          pattern: 'storage_provider'
+
+  - it: adds the S3 provider to import.toml without any credentials when media.s3 is on
+    values:
+      - values/import.yaml
+    set:
+      media:
+        s3:
+          enabled: true
+          endpoint: https://s3.example.org
+          bucket: matrix-tuwunel
+          basePath: media
+          existingSecret: tuwunel-s3
+    asserts:
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: 'media_storage_providers = \["s3"\]'
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?s)\[global\.storage_provider\.s3\.s3\]\n.*bucket = "matrix-tuwunel"'
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: 'base_path = "media"'
+      - template: secret-import.yaml
+        notMatchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?m)^\s*(key|secret|token)\s*='
+
+  - it: fails without an image tag or digest
+    values:
+      - values/import.yaml
+    set:
+      import:
+        image:
+          tag: ""
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "neither import.image.tag nor import.image.digest is set"
+
+  - it: fails without the Secret for the Synapse database
+    values:
+      - values/import.yaml
+    set:
+      import:
+        synapseDb:
+          existingSecret: ""
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "import.synapseDb.existingSecret is not set"
+
+  - it: fails without the Secret for the signing key
+    values:
+      - values/import.yaml
+    set:
+      import:
+        signingKey:
+          existingSecret: ""
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "import.signingKey.existingSecret is not set"
+
+  - it: fails when persistence is off
+    values:
+      - values/import.yaml
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "persistence.enabled is off"
+
+  - it: fails when fromS3 has no endpoint
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            bucket: matrix
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "import.media.fromS3.endpoint is not set"
+
+  - it: fails when fromS3 has no bucket
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "import.media.fromS3.bucket is not set"
+
+  - it: fails when fromS3 has no Secret
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+    asserts:
+      - template: validate-import.yaml
+        failedTemplate:
+          errorPattern: "import.media.fromS3.existingSecret is not set"
