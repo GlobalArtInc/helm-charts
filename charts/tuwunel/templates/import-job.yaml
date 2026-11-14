@@ -9,6 +9,38 @@
 {{- $args = concat $args (list "--import-verify" "--import-verify-report" "/var/lib/tuwunel/import/verify.json") }}
 {{- end }}
 {{- $args = concat $args .Values.import.extraArgs }}
+{{- $scratch := .Values.import.scratch.enabled }}
+{{- $wrapper := list
+  `set -u`
+  `if [ -e /var/lib/tuwunel/CURRENT ]; then`
+  `  echo "import: /var/lib/tuwunel already holds a database (CURRENT found). The import does not overwrite it. The importer was not started." >&2`
+  `  exit 1`
+  `fi`
+  `( "$@"; echo $? > /scratch/rc ) 2>&1 | tee /scratch/import.log`
+  `rc=$(cat /scratch/rc 2>/dev/null)`
+  `case $rc in ''|*[!0-9]*) echo "import: the importer exit code is unknown, taking it as 1" >&2; rc=1 ;; esac`
+  `echo "import exit code: $rc"`
+  `copy_failed=0`
+  `if grep -qF 'Synapse import finished' /scratch/import.log; then`
+  `  echo "import: the import finished, copying the database from /scratch/db to the volume"`
+  `  if find /scratch/db -mindepth 1 -maxdepth 1 -exec cp -a -t /var/lib/tuwunel {} +; then`
+  `    src=$(find /scratch/db -type f | wc -l | tr -d ' ')`
+  `    dst=$(find /var/lib/tuwunel -path /var/lib/tuwunel/import -prune -o -type f -print | wc -l | tr -d ' ')`
+  `    if [ "$src" -gt 0 ] && [ "$src" = "$dst" ]; then`
+  `      echo "copied $dst files to the volume"`
+  `    else`
+  `      echo "import: the copy check failed: $src files in /scratch/db, $dst on the volume. The volume holds a partial database, empty it before a retry." >&2`
+  `      copy_failed=1`
+  `    fi`
+  `  else`
+  `    echo "import: copying the database to the volume failed. The volume may hold a partial database, empty it before a retry." >&2`
+  `    copy_failed=1`
+  `  fi`
+  `else`
+  `  echo "volume left untouched: the import did not finish, nothing was copied, a retry is safe"`
+  `fi`
+  `if [ "$copy_failed" -ne 0 ]; then exit 1; fi`
+  `exit "$rc"` }}
 {{- $prepare := list "set -eu" "umask 077" "mkdir -p /var/lib/tuwunel/import" "cp /etc/tuwunel-import/homeserver.yaml /work/homeserver.yaml" }}
 {{- if .Values.import.bcryptPepper.existingSecret }}
 {{- $prepare = concat $prepare (list
@@ -127,8 +159,13 @@ spec:
         - name: import
           image: {{ $image }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if $scratch }}
+          command: ["sh", "-c"]
+          args: {{ concat (list ($wrapper | join "\n") "import" "tuwunel") $args | toJson }}
+          {{- else }}
           command: ["tuwunel"]
           args: {{ $args | toJson }}
+          {{- end }}
           env:
             - name: TUWUNEL_SYNAPSE_DB
               valueFrom:
@@ -161,6 +198,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/tuwunel
+            {{- if $scratch }}
+            - name: db-scratch
+              mountPath: /scratch
+            {{- end }}
             - name: import-config
               mountPath: /etc/tuwunel-import/import.toml
               subPath: import.toml
@@ -197,4 +238,12 @@ spec:
             sizeLimit: 1Mi
         - name: tmp
           emptyDir: {}
+        {{- if $scratch }}
+        - name: db-scratch
+          emptyDir:
+            sizeLimit: {{ .Values.import.scratch.sizeLimit }}
+            {{- with .Values.import.scratch.medium }}
+            medium: {{ . }}
+            {{- end }}
+        {{- end }}
 {{- end }}

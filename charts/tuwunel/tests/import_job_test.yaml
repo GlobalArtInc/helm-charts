@@ -61,9 +61,13 @@ tests:
           path: spec.template.metadata.labels["app.kubernetes.io/name"]
           value: tuwunel-import
 
-  - it: runs the importer with a report and the verification by default
+  - it: without scratch runs the importer directly with a report and the verification
     values:
       - values/import.yaml
+    set:
+      import:
+        scratch:
+          enabled: false
     asserts:
       - template: import-job.yaml
         equal:
@@ -87,12 +91,14 @@ tests:
             - --import-verify-report
             - /var/lib/tuwunel/import/verify.json
 
-  - it: drops the verification and appends extraArgs, and prefers the digest
+  - it: without scratch drops the verification and appends extraArgs, and prefers the digest
     values:
       - values/import.yaml
     set:
       import:
         verify: false
+        scratch:
+          enabled: false
         extraArgs:
           - --import-resume
         image:
@@ -516,6 +522,228 @@ tests:
         notMatchRegex:
           path: stringData["import.toml"]
           pattern: '(?m)^\s*(key|secret|token)\s*='
+
+  - it: writes the database to an emptyDir on the node by default and mounts it in the import container only
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-scratch
+            emptyDir:
+              sizeLimit: 8Gi
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: db-scratch
+            mountPath: /scratch
+      - template: import-job.yaml
+        notContains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: db-scratch
+            mountPath: /scratch
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?m)^\s*database_path = "/scratch/db"$'
+
+  - it: takes the scratch size limit and medium from values
+    values:
+      - values/import.yaml
+    set:
+      import:
+        scratch:
+          sizeLimit: 20Gi
+          medium: Memory
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-scratch
+            emptyDir:
+              sizeLimit: 20Gi
+              medium: Memory
+
+  - it: keeps the reports on the volume and the data mount with scratch
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/tuwunel
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[2]
+          value: tuwunel
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[8]
+          value: /var/lib/tuwunel/import/report.json
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[11]
+          value: /var/lib/tuwunel/import/verify.json
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: '(?m)^mkdir -p /var/lib/tuwunel/import$'
+
+  - it: wraps the importer in a script that gets the importer command line as arguments
+    values:
+      - values/import.yaml
+    set:
+      import:
+        extraArgs:
+          - --some-flag
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].command
+          value: ["sh", "-c"]
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[1]
+          value: import
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[2]
+          value: tuwunel
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[3]
+          value: -c
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].args[-1]
+          value: --some-flag
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?m)^set -u$'
+      - template: import-job.yaml
+        notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'PEPPER|TUWUNEL_SYNAPSE_DB|postgresql://'
+
+  - it: the wrapper refuses to run when the volume already holds a database
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?m)^if \[ -e /var/lib/tuwunel/CURRENT \]; then\n.*\n  exit 1\nfi$'
+
+  - it: the wrapper keeps the importer exit code and logs to the container and to a file
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?m)^\( "\$@"; echo \$\? > /scratch/rc \) 2>&1 \| tee /scratch/import.log$'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'echo "import exit code: \$rc"'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?m)^exit "\$rc"$'
+
+  - it: the wrapper copies the database only when the import finished, and checks the file count
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "grep -qF 'Synapse import finished' /scratch/import.log"
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'cp -a -t /var/lib/tuwunel'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?s)find /scratch/db -type f.*find /var/lib/tuwunel -path /var/lib/tuwunel/import -prune.*\[ "\$src" = "\$dst" \]'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'copied \$dst files to the volume'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '(?m)^if \[ "\$copy_failed" -ne 0 \]; then exit 1; fi$'
+
+  - it: the wrapper leaves the volume untouched when the import did not finish
+    values:
+      - values/import.yaml
+    asserts:
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'volume left untouched: the import did not finish, nothing was copied, a retry is safe'
+
+  - it: without scratch has no scratch volume, no wrapper and the database on the volume
+    values:
+      - values/import.yaml
+    set:
+      import:
+        scratch:
+          enabled: false
+    asserts:
+      - template: import-job.yaml
+        notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: db-scratch
+            emptyDir:
+              sizeLimit: 8Gi
+      - template: import-job.yaml
+        notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: db-scratch
+            mountPath: /scratch
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.containers[0].command
+          value: ["tuwunel"]
+      - template: secret-import.yaml
+        matchRegex:
+          path: stringData["import.toml"]
+          pattern: '(?m)^\s*database_path = "/var/lib/tuwunel"$'
+
+  - it: rejects a scratch medium other than empty or Memory
+    values:
+      - values/import.yaml
+    set:
+      import:
+        scratch:
+          medium: HugePages
+    asserts:
+      - template: import-job.yaml
+        failedTemplate: {}
+
+  - it: rejects a non-boolean scratch.enabled
+    values:
+      - values/import.yaml
+    set:
+      import:
+        scratch:
+          enabled: "yes"
+    asserts:
+      - template: import-job.yaml
+        failedTemplate: {}
 
   - it: fails without an image tag or digest
     values:

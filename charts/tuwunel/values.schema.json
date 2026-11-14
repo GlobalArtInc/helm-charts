@@ -315,6 +315,24 @@
             }
           }
         },
+        "scratch": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "sizeLimit": {
+              "type": "string"
+            },
+            "medium": {
+              "type": "string",
+              "enum": [
+                "",
+                "Memory"
+              ]
+            }
+          }
+        },
         "bcryptPepper": {
           "type": "object",
           "properties": {

@@ -181,6 +181,15 @@ import:
   bcryptPepper:
     existingSecret: ""
     key: pepper
+  # The importer writes RocksDB to an emptyDir (the node's disk by default) and, once the import
+  # has finished, copies the database to the volume. Writing to a network volume is much slower.
+  # The volume stays untouched if the import fails. --import-resume does not work with it.
+  scratch:
+    enabled: true
+    # Free space needed on the node. Counts against the container memory limit with medium: Memory.
+    sizeLimit: 8Gi
+    # Empty is the node's disk. Memory is also allowed.
+    medium: ""
   verify: true
   extraArgs: []
   activeDeadlineSeconds: 3600

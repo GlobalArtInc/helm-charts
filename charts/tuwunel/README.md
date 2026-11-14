@@ -72,6 +72,9 @@ first start.
 | `backup.retrySeconds` | `900` | Pause before the next attempt after a failed or skipped round. |
 | `backup.waitSeconds` | `1800` | How long a round waits for the new backup to appear in the repository after the signal. |
 | `backup.startupWaitSeconds` | `1800` | How long the sidecar polls the server (`/_matrix/client/versions` on `service.port`) before the first round. If the server never answers, that round is skipped. |
+| `import.scratch.enabled` | `true` | Write the import database to an `emptyDir` and copy it to the volume after a successful import. See "Where the database is written". |
+| `import.scratch.sizeLimit` | `8Gi` | `sizeLimit` of that `emptyDir`. The node needs this much free disk. |
+| `import.scratch.medium` | `""` | Medium of that `emptyDir`: empty is the node's disk, `Memory` is allowed. |
 | `import.prepare.resources` | `requests: 50m / 64Mi`, `limits: 128Mi` memory | Resources of the `prepare` init container of the import Job. |
 | `monitoring.probe.enabled` | `false` | Create a blackbox Probe. |
 | `monitoring.prometheusRule.enabled` | `false` | Create a PrometheusRule. |
@@ -221,9 +224,52 @@ that changes its spec fails. To run it again, delete it first:
 kubectl delete job <fullname>-import
 ```
 
-If the import stopped partway (a crash, a full disk), fix the cause, delete the Job and run it again
-with `--set 'import.extraArgs={--import-resume}'`. The importer reruns the first unfinished phase and
+If the import stopped partway (a crash, a full disk), fix the cause, delete the Job and run it again.
+With scratch (the default) the run starts from the beginning. With `import.scratch.enabled: false` you can
+continue with `--set 'import.extraArgs={--import-resume}'`. The importer reruns the first unfinished phase and
 continues from there. Further flags go through `import.extraArgs` too.
+
+### Where the database is written
+
+By default (`import.scratch.enabled: true`) the importer does not write RocksDB to the volume. The Job
+mounts an `emptyDir`, `db-scratch`, at `/scratch` in the `import` container and `import.toml` points
+`database_path` at `/scratch/db`. When the import has finished, the container copies the database to the
+volume. Writing RocksDB to a network volume is slow: on Ceph RBD an import took 41 minutes (35 of them
+in the rooms phase, with `Database Stall Recovered` in the log), and 4.3 minutes on a local disk. The
+finished database was 688 MB, so the copy takes seconds. The reports stay on the volume, in
+`/var/lib/tuwunel/import/`, as before.
+
+- `import.scratch.sizeLimit` (default `8Gi`) caps the `emptyDir`, and the node must have that much free
+  disk. If the database outgrows the limit, the pod is evicted. `import.scratch.medium: Memory` puts the
+  `emptyDir` in RAM; it then counts against the memory limit of the container (`import.resources`).
+- The `import` container runs a short shell script around the importer. It passes the importer the same
+  arguments as without scratch, writes the importer's output to `/scratch/import.log` and to the
+  container log, and takes the importer's exit code. The pepper and the database URL stay in the
+  environment: the script does not print them and does not pass them as arguments.
+- The script does not start if `/var/lib/tuwunel/CURRENT` exists, that is, if the volume already holds a
+  database. It prints a message and exits with code 1. The import never overwrites a database.
+- If the log has the line `Synapse import finished`, the import went to the end and the script copies
+  `/scratch/db` to the volume with `cp -a`, then compares the number of files in `/scratch/db` and in the
+  copy. The verification (`import.verify`) can make the importer exit with code 1 because of known
+  differences, and the database is copied all the same. If the copy fails or the numbers differ, the
+  script exits with code 1; the volume may then hold a partial database, and it must be emptied before a
+  retry (the `CURRENT` check would refuse the retry).
+- If the line is not there (the importer crashed, ran out of time or of disk), nothing is copied and the
+  volume is not touched. A retry is safe.
+- The Job exits with the importer's exit code, or with 1 if the copy failed.
+
+The script prints these lines; look for them in `kubectl logs job/<fullname>-import -c import`:
+
+| Line | Meaning |
+|---|---|
+| `import exit code: N` | The exit code of the importer. |
+| `copied N files to the volume` | The import finished, the database is on the volume, the file counts match. |
+| `volume left untouched: ...` | The import did not finish. Nothing was copied. |
+| `import: /var/lib/tuwunel already holds a database ...` | The `CURRENT` check refused to start the importer. |
+
+`--import-resume` does not work with scratch: the `emptyDir` is gone with the pod, so a retry starts from
+the beginning. Use `import.scratch.enabled: false` to write to the volume directly, as in earlier
+versions of the chart; then the script is not used and `--import-resume` works as described above.
 
 ### Reading the result
 
