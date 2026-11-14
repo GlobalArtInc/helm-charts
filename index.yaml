@@ -3,9 +3,9 @@ entries:
   cert-manager-webhook-ispmanager:
   - apiVersion: v2
     appVersion: 1.2.5
-    created: "2026-11-14T18:13:33.909172517Z"
+    created: "2026-11-14T19:37:57.901196874Z"
     description: ISPManager Cert-Manager ACME webhook
-    digest: 571b6776a831c059a17ba357586ce7137bb5e4485fb6a3b5f0ee2b40e12672ab
+    digest: a3e6614e898ff983bf83020cb7cc33c60dce4042521542fc33b79aa254b5cf38
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - cert-manager
@@ -165,9 +165,9 @@ entries:
   conductor:
   - apiVersion: v2
     appVersion: 3.32.5
-    created: "2026-11-14T18:13:33.910650298Z"
+    created: "2026-11-14T19:37:57.90197997Z"
     description: Conductor OSS workflow engine with its UI, on PostgreSQL and Elasticsearch
-    digest: 70c3188b7b632616f1d36ad8925f788909a08545170715a95363bd0019503f6d
+    digest: bce961a833fa999f32cb8e7f5f8022ba19aad038045d549dcc501832afd54a9a
     home: https://github.com/GlobalArtInc/helm-charts
     keywords:
     - conductor
@@ -276,20 +276,56 @@ entries:
   gitlab-mr-combiner:
   - apiVersion: v1
     appVersion: 1.0.0
-    created: "2026-11-14T18:13:33.910967103Z"
+    created: "2026-11-14T19:37:57.902245888Z"
     description: Gitlab MR Combiner
-    digest: af222f3d7620a5820e3fbeca7630cb3c476d27dfbbaa244ab2d0316facbf5362
+    digest: ad79c09ba453ca2f638eefa427029bcb3352f9094f9d522d05fec36fe6122086
     name: gitlab-mr-combiner
     urls:
     - https://GlobalArtInc.github.io/helm-charts/gitlab-mr-combiner-1.0.0.tgz
     version: 1.0.0
+  matrix:
+  - apiVersion: v2
+    appVersion: 2.0.0
+    created: "2026-11-14T19:37:57.904351443Z"
+    dependencies:
+    - condition: matrix-hookshot.enabled
+      name: matrix-hookshot
+      repository: https://globalartinc.github.io/helm-charts
+      version: 0.5.0
+    - condition: synapse-admin.enabled
+      name: synapse-admin
+      repository: https://globalartinc.github.io/helm-charts
+      version: 0.4.0
+    description: 'Matrix homeserver stack: Tuwunel, with an optional Hookshot webhook
+      bridge and a Synapse Admin interface'
+    digest: 486136102f5906b9c973e4498430a89ccce558323f69743a9492d8210b633b71
+    home: https://github.com/GlobalArtInc/helm-charts
+    keywords:
+    - matrix
+    - homeserver
+    - tuwunel
+    - chat
+    - hookshot
+    - synapse-admin
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - email: support@globalart.dev
+      name: GlobalArt Inc
+    name: matrix
+    sources:
+    - https://github.com/matrix-construct/tuwunel
+    - https://github.com/GlobalArtInc/helm-charts
+    type: application
+    urls:
+    - https://GlobalArtInc.github.io/helm-charts/matrix-0.2.0.tgz
+    version: 0.2.0
   matrix-hookshot:
   - apiVersion: v2
     appVersion: 7.5.0
-    created: "2026-11-14T18:13:33.911343898Z"
+    created: "2026-11-14T19:37:57.904717797Z"
     description: Hookshot, the Matrix bridge for webhooks and code forges, as an application
       service of a Synapse release
-    digest: 4e619577ff7f93cfe87915936279e6ebaad4146fd5cc000a4b57f6ad17536365
+    digest: 38d7d78ec84d5902eefe9ff6497e8045e0ef4d0899eeca0d644a811332c0eed1
     home: https://github.com/GlobalArtInc/helm-charts
     keywords:
     - matrix
@@ -425,9 +461,9 @@ entries:
   mediacore:
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-11-14T18:13:33.91298637Z"
+    created: "2026-11-14T19:37:57.906396609Z"
     description: WebRTC SFU speaking the LiveKit protocol, with its own front end
-    digest: dc97f5b5abd1d957cbccb473f43513862040173fe6d59a674d2d15713a20aaab
+    digest: cfc63c75012daead332ba93b9661e2d13bc99dbc6fb635cff1a678b28ee9ea92
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - webrtc
@@ -821,9 +857,9 @@ entries:
     version: 0.1.0
   route:
   - apiVersion: v2
-    created: "2026-11-14T18:13:33.913164097Z"
+    created: "2026-11-14T19:37:57.906534544Z"
     description: 'Публикация приложения через шлюз: сертификат, слушатель и маршрут'
-    digest: 6385c8498865103621d002dd5fb6791d699a133e08b680f81b8b565b0817e0b8
+    digest: 131d01c231fda061505f07ea8ea67a6b3c4868ab108333426ddc6373728185d0
     name: route
     type: application
     urls:
@@ -832,9 +868,9 @@ entries:
   smev4-agent:
   - apiVersion: v2
     appVersion: 3.29.1
-    created: "2026-11-14T18:13:33.913515253Z"
+    created: "2026-11-14T19:37:57.906834103Z"
     description: Helm chart for deploying the SMEV4 (einfahrt) agent wrapped in globalartltd/smev4-agent
-    digest: f4066ef7bb6ebdc8d487515a701a0d852935dea6a1fc69746cbef4cc1e28303b
+    digest: 4506478ffe6f0f164a6d2ecbea9d05447a73da146e2b54b9c728c2771573b70e
     home: https://github.com/globalartinc/helm-charts
     keywords:
     - smev
@@ -871,10 +907,10 @@ entries:
   synapse-admin:
   - apiVersion: v2
     appVersion: v1.5.1
-    created: "2026-11-14T18:13:33.913939269Z"
+    created: "2026-11-14T19:37:57.907187667Z"
     description: Ketesa admin UI for Synapse under a path of the homeserver host,
       and its first admin user
-    digest: 85756abe38492fa955645f3d60658048cd44822d49e3c0984eda3d295f23107c
+    digest: b272ada8ece74bf7ab56d274c316e71555ec6a0f58c8981c1121f7258a7f17f8
     home: https://github.com/GlobalArtInc/helm-charts
     keywords:
     - matrix
@@ -986,9 +1022,9 @@ entries:
     version: 0.1.0
   synapse-secrets:
   - apiVersion: v2
-    created: "2026-11-14T18:13:33.914122654Z"
+    created: "2026-11-14T19:37:57.907337628Z"
     description: Signing key and application service registrations for a Synapse homeserver
-    digest: 2bc2777165798e0b92206a890b6caf82a55793d11b3c0386c74412ff74d4daef
+    digest: b33465da15d3f3e1b50243e83f0a0cf51b70bd59485748e71c6c6d96600692cf
     home: https://github.com/GlobalArtInc/helm-charts
     keywords:
     - matrix
@@ -1122,4 +1158,4 @@ entries:
     urls:
     - https://GlobalArtInc.github.io/helm-charts/tuwunel-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-14T18:13:33.908646037Z"
+generated: "2026-11-14T19:37:57.900060916Z"
