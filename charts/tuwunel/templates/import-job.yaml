@@ -124,8 +124,13 @@ spec:
         - name: fetch-media
           image: {{ $from.image.repository }}:{{ $from.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if $from.fixCase }}
+          command: ["sh", "-ec"]
+          args: {{ list (printf "rclone copy \"%s/local_content\" /synapse-media/local_content --transfers 16 --checksum\n%s" $source (include "tuwunel.import.foldCaseScript" .)) | toJson }}
+          {{- else }}
           command: ["rclone"]
           args: {{ list "copy" (printf "%s/local_content" $source) "/synapse-media/local_content" "--transfers" "16" "--checksum" | toJson }}
+          {{- end }}
           env:
             - name: HOME
               value: /tmp

@@ -170,6 +170,10 @@ import:
       prefix: ""
       # Secret with the keys access-key and secret-key for the Synapse media bucket.
       existingSecret: ""
+      # Synapse could have stored media on storage that ignored the case of directory names, so the first
+      # directory level of a key may differ in case from the media id. When true, every case variant of that
+      # level is linked to the file after the copy.
+      fixCase: true
       image:
         repository: docker.io/rclone/rclone
         tag: 1.75.2

@@ -294,6 +294,9 @@
                 "existingSecret": {
                   "type": "string"
                 },
+                "fixCase": {
+                  "type": "boolean"
+                },
                 "image": {
                   "type": "object",
                   "properties": {

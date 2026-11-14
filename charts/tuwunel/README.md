@@ -200,7 +200,7 @@ database. The chart refuses to render otherwise.
 Synapse's media is not on the volume. With `import.media.fromS3.enabled`, an init container (`rclone`)
 copies `local_content/` from the bucket `import.media.fromS3.bucket`, under the optional
 `import.media.fromS3.prefix`, into an `emptyDir` of `import.media.emptyDirSizeLimit`, and the importer
-reads the files from there. Synapse's `url_cache` previews are not imported.
+reads the files from there. Synapse's `url_cache` previews are not imported. With `import.media.fromS3.fixCase` (on by default), the init container also links every case variant of the first directory level of each key to its file, because Synapse could have stored media on storage that ignored the case of directory names.
 
 The import config is a Secret, `<fullname>-import`. It holds no credentials. Its `homeserver.yaml` has
 `app_service_config_files: []` on purpose: appservice registrations come from `appservices.*` when the

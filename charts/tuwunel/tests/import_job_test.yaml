@@ -416,6 +416,7 @@ tests:
             bucket: matrix
             prefix: /synapse/
             existingSecret: synapse-media-s3
+            fixCase: false
     asserts:
       - template: import-job.yaml
         equal:
@@ -458,11 +459,59 @@ tests:
             endpoint: https://s3.example.org
             bucket: matrix
             existingSecret: synapse-media-s3
+            fixCase: false
     asserts:
       - template: import-job.yaml
         equal:
           path: spec.template.spec.initContainers[1].args[1]
           value: SRC:matrix/local_content
+
+  - it: copies through sh and links the case variants of the first directory level by default
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+            existingSecret: synapse-media-s3
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].command
+          value: ["sh", "-ec"]
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: '(?m)^rclone copy "SRC:matrix/local_content" /synapse-media/local_content --transfers 16 --checksum$'
+      - template: import-job.yaml
+        matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: 'case variants linked'
+
+  - it: runs rclone alone with the copy arguments when fixCase is off
+    values:
+      - values/import.yaml
+    set:
+      import:
+        media:
+          fromS3:
+            enabled: true
+            endpoint: https://s3.example.org
+            bucket: matrix
+            existingSecret: synapse-media-s3
+            fixCase: false
+    asserts:
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].command
+          value: ["rclone"]
+      - template: import-job.yaml
+        equal:
+          path: spec.template.spec.initContainers[1].args[0]
+          value: copy
 
   - it: writes a homeserver.yaml without appservice registrations
     values:

@@ -91,3 +91,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "appservices.existingSecret and appservices.registrations are both set. The chart mounts the existing Secret and ignores registrations. Keep one of them." -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "tuwunel.import.foldCaseScript" -}}
+root=/synapse-media/local_content
+cd "$root"
+list="$(mktemp)"
+find . -mindepth 3 -maxdepth 3 -type f | sed 's#^\./##' | awk -F/ '
+{
+  c1 = substr($1, 1, 1); c2 = substr($1, 2, 1)
+  a[1] = tolower(c1); a[2] = toupper(c1); b[1] = tolower(c2); b[2] = toupper(c2)
+  for (i = 1; i <= 2; i++) for (j = 1; j <= 2; j++) {
+    v = a[i] b[j]
+    if (v != $1) print v "/" $2 "/" $3 "\t" $0
+  }
+}' | sort -u > "$list"
+made=0
+while IFS="$(printf '\t')" read -r target source; do
+  if [ ! -e "$target" ]; then
+    mkdir -p "$(dirname "$target")"
+    ln -s "$PWD/$source" "$target"
+    made=$((made + 1))
+  fi
+done < "$list"
+echo "case variants linked: $made"
+{{- end -}}
