@@ -55,6 +55,8 @@ first start.
 | `persistence.storageClass` | `""` | Storage class. Empty means the cluster default. |
 | `persistence.size` | `20Gi` | Size of the data claim. |
 | `persistence.accessModes` | `[ReadWriteOnce]` | Access modes of the data claim. |
+| `warmCache.enabled` | `false` | Read the SST files in the background right after the container starts, to fill the OS page cache. |
+| `warmCache.path` | `""` | Directory that `warmCache` reads. Empty means `/var/lib/tuwunel`. |
 | `media.s3.enabled` | `false` | Store media in an S3-compatible bucket. |
 | `media.s3.existingSecret` | `""` | Secret with the S3 access and secret keys. |
 | `service.type` | `ClusterIP` | Service type. |
@@ -123,6 +125,8 @@ to either restarts the pod. The checksum covers only the Secrets the chart
 creates. With `appservices.existingSecret`, the content of that Secret is not
 in the checksum: after you change it, restart the pod by hand with
 `kubectl rollout restart statefulset/<fullname>`.
+
+`warmCache.enabled` starts a background `cat` of the SST files in the data directory right after the container starts, so that they are in the OS page cache before the first sync. On a network volume, use it together with `config.rocksdb.direct_io: false` and `config.rocksdb.cache_capacity_mb`.
 
 ## Exposing the server
 

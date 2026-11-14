@@ -70,6 +70,17 @@
         }
       }
     },
+    "warmCache": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
     "media": {
       "type": "object",
       "properties": {

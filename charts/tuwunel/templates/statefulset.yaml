@@ -84,6 +84,12 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- if .Values.warmCache.enabled }}
+          lifecycle:
+            postStart:
+              exec:
+                command: ["sh", "-c", {{ printf "(cat %s/*.sst > /dev/null 2>&1 &); exit 0" (.Values.warmCache.path | default "/var/lib/tuwunel") | quote }}]
+          {{- end }}
           startupProbe:
             exec:
               command: {{ .Values.probes.startup.command | toJson }}

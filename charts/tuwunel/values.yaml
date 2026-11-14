@@ -43,6 +43,14 @@ persistence:
   accessModes:
     - ReadWriteOnce
 
+# Reads the SST files of the database in the background right after the container
+# starts, so they land in the OS page cache. Useful with `config.rocksdb.direct_io: false`
+# on network volumes.
+warmCache:
+  enabled: false
+  # Directory with the SST files. Empty means the data directory, /var/lib/tuwunel.
+  path: ""
+
 media:
   s3:
     enabled: false

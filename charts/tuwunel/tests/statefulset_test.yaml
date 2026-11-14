@@ -242,7 +242,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 8295ac6e8a64f91614ab7e824e8a9617f70db62bc22864171611ba7f077a24bb
+          value: 097d6bd593dcf54bb3c02982ff159964eb6438c752063f86ea970e35cc99297c
 
   - it: changes the config checksum when config changes
     release:
@@ -256,7 +256,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: 57bbca67c1e36ee352d412fd50e592c93a66fc5b87d8b3e05b7e28b2f8ff3944
+          value: 47a3fa594c873baa6306fed79fcea7f5fee46bb097b22d9f3291139bb61a7793
 
   - it: turns off service links so Service variables do not reach the config reader
     release:
@@ -541,3 +541,40 @@ tests:
         equal:
           path: spec.template.spec.containers[1].command
           value: ["/bin/sh", "/scripts/backup.sh"]
+
+  - it: has no lifecycle hook on the tuwunel container by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+    asserts:
+      - template: statefulset.yaml
+        notExists:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: warms the data directory after start when warmCache is on
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      warmCache:
+        enabled: true
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].lifecycle.postStart.exec.command
+          value: ["sh", "-c", "(cat /var/lib/tuwunel/*.sst > /dev/null 2>&1 &); exit 0"]
+
+  - it: warms the directory from warmCache.path when it is set
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      warmCache:
+        enabled: true
+        path: /data
+    asserts:
+      - template: statefulset.yaml
+        equal:
+          path: spec.template.spec.containers[0].lifecycle.postStart.exec.command
+          value: ["sh", "-c", "(cat /data/*.sst > /dev/null 2>&1 &); exit 0"]

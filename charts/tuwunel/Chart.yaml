@@ -2,7 +2,7 @@ apiVersion: v2
 name: tuwunel
 description: Tuwunel Matrix homeserver, a replacement for Synapse, run as one instance with its database on a persistent volume
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "2.0.0"
 home: https://github.com/GlobalArtInc/helm-charts
 sources:
