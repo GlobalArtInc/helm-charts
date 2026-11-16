@@ -180,3 +180,25 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "error parsing regexp"
+
+  - it: fails when workload is Deployment and persistence is off
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      workload: Deployment
+      persistence:
+        enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "workload is Deployment and persistence.enabled is off"
+
+  - it: refuses a workload that is neither StatefulSet nor Deployment
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      workload: DaemonSet
+    asserts:
+      - failedTemplate:
+          errorPattern: "value must be one of"

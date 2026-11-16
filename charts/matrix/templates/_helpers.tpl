@@ -90,6 +90,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.appservices.existingSecret .Values.appservices.registrations -}}
 {{- fail "appservices.existingSecret and appservices.registrations are both set. The chart mounts the existing Secret and ignores registrations. Keep one of them." -}}
 {{- end -}}
+
+{{- if and (eq .Values.workload "Deployment") (not .Values.persistence.enabled) -}}
+{{- fail "workload is Deployment and persistence.enabled is off. Without the data claim the database lives in an emptyDir, and a Deployment recreates the pod after a node failure, which would start it with an empty database. Turn persistence.enabled on or keep workload StatefulSet." -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "tuwunel.import.foldCaseScript" -}}

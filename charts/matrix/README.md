@@ -67,6 +67,7 @@ The chart was published as `tuwunel` up to 0.1.x. `nameOverride` still defaults 
 | `image.tag` | `v2.0.0` | Image tag. Ignored when `image.digest` is set. |
 | `image.digest` | `""` | Image digest, used instead of the tag when set. Production sets it. |
 | `replicaCount` | `1` | 0 or 1. |
+| `workload` | `StatefulSet` | `StatefulSet` or `Deployment`. A Deployment uses the Recreate strategy and gets a new pod after a node failure; it needs `persistence.enabled`. See "Node failure". |
 | `config` | `{}` | Settings under `[global]` in `tuwunel.toml`, as a nested map. |
 | `extraConfigToml` | `""` | Raw TOML appended to `tuwunel.toml`. |
 | `appservices.existingSecret` | `""` | Secret with appservice registration files (`*.yaml`). |
@@ -145,9 +146,76 @@ The pod carries a checksum of the config and registration Secrets, so a change
 to either restarts the pod. The checksum covers only the Secrets the chart
 creates. With `appservices.existingSecret`, the content of that Secret is not
 in the checksum: after you change it, restart the pod by hand with
-`kubectl rollout restart statefulset/<fullname>`.
+`kubectl rollout restart <workload>/<fullname>`, where `<workload>` is `statefulset` or `deployment` (see "Node failure").
 
 `warmCache.enabled` starts a background `cat` of the SST files in the data directory right after the container starts, so that they are in the OS page cache before the first sync. On a network volume, use it together with `config.rocksdb.direct_io: false` and `config.rocksdb.cache_capacity_mb`.
+
+## Node failure
+
+With `workload: StatefulSet` (the default), the StatefulSet controller does not
+create a new pod while the old pod object still exists. When the node goes down,
+the pod stays `Terminating` or `Unknown` until someone deletes it by hand, and the
+server stays down. With `workload: Deployment` the chart renders a Deployment
+with the `Recreate` strategy instead. Its controller creates the new pod as soon
+as the old one is marked for deletion, so the server comes back without a manual
+step.
+
+The data volume is `ReadWriteOnce`, so the new pod starts only after the volume
+is detached from the dead node. That takes about 6 minutes after the node stops
+answering. The old pod is evicted after the tolerations below expire: with
+`tolerationSeconds: 30` the server is back after roughly 7 minutes. The chart
+sets no tolerations by default, so Kubernetes uses its own default of 300
+seconds, and recovery takes longer.
+
+```yaml
+workload: Deployment
+tolerations:
+  - key: node.kubernetes.io/unreachable
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 30
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 30
+```
+
+Before you force the volume to detach from a node that is lost, make sure the
+node is really off. If the node was lost to a power failure, check that it is
+powered down first. A node that still runs can keep the old server writing to
+the database while the new one starts elsewhere.
+
+In the commands in this README, `<workload>` is `statefulset` or `deployment`,
+as set by `workload`. Find the pods by label, not by name, because a Deployment's
+pod name is random: `-l app.kubernetes.io/name=tuwunel,app.kubernetes.io/instance=<release>`
+(the name part is `nameOverride`, `tuwunel` by default).
+
+### Switch an existing StatefulSet release to Deployment
+
+The data stays on the same claim, so the release can move to a Deployment in place.
+Do it in this order:
+
+1. Delete the StatefulSet and keep its pod running:
+
+   ```console
+   kubectl delete statefulset/<fullname> --cascade=orphan
+   ```
+
+2. Delete the old pod, so that the volume is free before anything else mounts it. The
+   server is down from here until the new pod is ready:
+
+   ```console
+   kubectl delete pod <fullname>-0
+   ```
+
+3. Upgrade the release with `workload: Deployment`. The new pod starts at once:
+
+   ```console
+   helm upgrade tuwunel globalart/matrix --reuse-values --set workload=Deployment
+   ```
+
+After this the pod name is `<fullname>-<hash>-<id>`. Use the label selector from
+above to find it.
 
 ## Exposing the server
 
@@ -559,13 +627,13 @@ This replaces the database with the contents of a backup. Everything written
 after that backup is lost. Take a snapshot of the volume first if the current
 database is still readable.
 
-1. Stop the server. Scale the StatefulSet by hand, because the chart refuses
+1. Stop the server. Scale the workload by hand, because the chart refuses
    `replicaCount: 0` while the backup is on, and wait until the pod is gone
    (the volume is `ReadWriteOnce`):
 
    ```console
-   kubectl scale statefulset/<fullname> --replicas=0
-   kubectl wait --for=delete pod/<fullname>-0 --timeout=15m
+   kubectl scale <workload>/<fullname> --replicas=0
+   kubectl wait --for=delete pod -l app.kubernetes.io/name=tuwunel,app.kubernetes.io/instance=<release> --timeout=15m
    ```
 
 2. Copy the repository from S3 onto the volume with a one-off pod. It uses the
@@ -656,8 +724,8 @@ database is still readable.
 4. Start the server again and check it:
 
    ```console
-   kubectl scale statefulset/<fullname> --replicas=1
-   kubectl logs <fullname>-0 -c tuwunel
+   kubectl scale <workload>/<fullname> --replicas=1
+   kubectl logs -l app.kubernetes.io/name=tuwunel,app.kubernetes.io/instance=<release> -c tuwunel
    ```
 
    The sidecar keeps adding backups to the same repository.
@@ -673,8 +741,9 @@ documentation does not settle, so check them in the rehearsal:
   volume afterwards. If it is gone, fetch it from S3 again.
 - If your config uses `appservices` or a media S3 provider, the one-off pod may
   need the same mounts and environment as the main container (the appservices
-  Secret, the `TUWUNEL_STORAGE_PROVIDER__*` variables). Copy them from the
-  StatefulSet if the server refuses to start in step 3.
+  Secret, the `TUWUNEL_STORAGE_PROVIDER__*` variables). Copy them from the pod
+  template of the workload (`kubectl get <workload>/<fullname> -o yaml`) if the
+  server refuses to start in step 3.
 - To restore without a running cluster, the documentation also has a manual
   recovery from the repository files (`shared_checksum/*.sst` renamed to
   `######.sst`, plus the files of one numbered backup).

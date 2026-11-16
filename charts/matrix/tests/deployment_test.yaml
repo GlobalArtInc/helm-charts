@@ -1,0 +1,91 @@
+suite: deployment
+templates:
+  - deployment.yaml
+  - statefulset.yaml
+  - secret-config.yaml
+  - secret-appservices.yaml
+  - configmap-backup.yaml
+tests:
+  - it: renders one Deployment with the Recreate strategy when workload is Deployment
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      workload: Deployment
+    asserts:
+      - template: deployment.yaml
+        isKind:
+          of: Deployment
+      - template: deployment.yaml
+        equal:
+          path: metadata.name
+          value: tuwunel
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 1
+      - template: deployment.yaml
+        equal:
+          path: spec.strategy.type
+          value: Recreate
+      - template: statefulset.yaml
+        hasDocuments:
+          count: 0
+
+  - it: takes the replica count from replicaCount
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      workload: Deployment
+      replicaCount: 0
+    asserts:
+      - template: deployment.yaml
+        equal:
+          path: spec.replicas
+          value: 0
+
+  - it: renders the same pod as the StatefulSet, with the backup sidecar and the data claim
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      workload: Deployment
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: deployment.yaml
+        lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].name
+          value: tuwunel
+      - template: deployment.yaml
+        equal:
+          path: spec.template.spec.containers[1].name
+          value: backup
+      - template: deployment.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /var/lib/tuwunel
+      - template: deployment.yaml
+        contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: tuwunel-data
+      - template: deployment.yaml
+        exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+      - template: deployment.yaml
+        exists:
+          path: spec.template.metadata.annotations["checksum/backup"]

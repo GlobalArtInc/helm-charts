@@ -2,7 +2,7 @@ apiVersion: v2
 name: matrix
 description: "Matrix homeserver stack: Tuwunel, with an optional Hookshot webhook bridge and a Synapse Admin interface"
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "2.0.0"
 home: https://github.com/GlobalArtInc/helm-charts
 sources:

@@ -14,6 +14,11 @@ imagePullSecrets: []
 # 0 or 1. Anything above 1 is refused by the schema and by validate.yaml.
 replicaCount: 1
 
+# StatefulSet or Deployment. A Deployment (strategy Recreate) gets a new pod as soon as the
+# old one is marked for deletion, so it comes back after a node failure; a StatefulSet waits
+# until the old pod is deleted. Deployment needs persistence.enabled.
+workload: StatefulSet
+
 # Required. The domain in every Matrix ID on this server (@user:<serverName>).
 # The server has issued IDs under it, so do not change it on an existing database.
 serverName: ""

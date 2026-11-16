@@ -8,6 +8,10 @@
       "type": "integer",
       "enum": [0, 1]
     },
+    "workload": {
+      "type": "string",
+      "enum": ["StatefulSet", "Deployment"]
+    },
     "serverName": {
       "type": "string"
     },

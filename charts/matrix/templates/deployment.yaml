@@ -1,0 +1,17 @@
+{{- if eq .Values.workload "Deployment" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tuwunel.fullname" . }}
+  labels:
+    {{- include "tuwunel.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tuwunel.selectorLabels" . | nindent 6 }}
+  template:
+    {{- include "tuwunel.podTemplate" . | nindent 4 }}
+{{- end }}
