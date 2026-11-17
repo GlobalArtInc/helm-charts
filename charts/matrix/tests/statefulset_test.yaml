@@ -242,7 +242,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: b82272c6ad2fd2810913a42bfe780742940af032d38c19d50b58659649fa9c2c
+          value: a6f11308bf8af4444c13c0c3ce68ecded995a019be49a6e0b2851047a228df01
 
   - it: changes the config checksum when config changes
     release:
@@ -256,7 +256,7 @@ tests:
       - template: statefulset.yaml
         equal:
           path: spec.template.metadata.annotations["checksum/config"]
-          value: a113d08c809788ee2df0baa55a054c9e1947f3b7e32f123ee10f0af1a781ce95
+          value: 21b53c0da3f59fe2bad28d695f252ebe2eb92452fc0778a79664c05aca8ab829
 
   - it: turns off service links so Service variables do not reach the config reader
     release:
@@ -483,6 +483,45 @@ tests:
           content:
             name: WAIT_SECONDS
             value: "1800"
+
+  - it: keeps 20 percent of the volume free by default
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: MIN_FREE_PERCENT
+            value: "20"
+
+  - it: gives the sidecar the minimum free space percent of the volume
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        minFreePercent: 35
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - template: statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: MIN_FREE_PERCENT
+            value: "35"
 
   - it: fails when backup.waitSeconds is 0
     release:

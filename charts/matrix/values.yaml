@@ -232,6 +232,8 @@ backup:
   path: /var/lib/tuwunel/backup
   # Backups the server keeps in the repository. At least 1.
   keep: 7
+  # Minimum percent of free space on the volume. Below it the sidecar does not create a new backup.
+  minFreePercent: 20
   # Pause between the end of one backup and the start of the next.
   intervalSeconds: 86400
   # Pause between the end of a failed round (or a skipped one) and the next attempt.

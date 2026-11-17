@@ -162,7 +162,7 @@ tests:
           pattern: '(?s)unsynced local backup.*uploading it without creating a new one"\n\s*upload_backup "\$local_latest"\n\s*return\n'
       - matchRegex:
           path: data["backup.sh"]
-          pattern: '(?s)upload_backup "\$local_latest"\n\s*return\n\s*fi\n\n\s*if ! create_backup "\$pid" "\$local_latest"; then\n\s*return 1\n\s*fi\n\s*upload_backup "\$created"'
+          pattern: '(?s)upload_backup "\$local_latest"\n\s*return\n\s*fi\n\n\s*if ! has_free_space; then\n\s*return 1\n\s*fi\n\n\s*if ! create_backup "\$pid" "\$local_latest"; then\n\s*return 1\n\s*fi\n\s*upload_backup "\$created"'
       - matchRegex:
           path: data["backup.sh"]
           pattern: 'FAILED: could not list \$\{TARGET\}meta'
@@ -204,6 +204,26 @@ tests:
       - matchRegex:
           path: data["backup.sh"]
           pattern: 'the server did not answer during startup, skipping this round'
+
+  - it: checks the free space on the volume before a new backup and reads MIN_FREE_PERCENT
+    template: configmap-backup.yaml
+    release:
+      name: tuwunel
+    set:
+      serverName: example.org
+      backup:
+        enabled: true
+        s3:
+          endpoint: https://s3.example.org
+          bucket: backups
+          existingSecret: backup-s3
+    asserts:
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'has_free_space'
+      - matchRegex:
+          path: data["backup.sh"]
+          pattern: 'MIN_FREE_PERCENT'
 
   - it: renders no validate output when the backup values are complete
     template: validate-backup.yaml

@@ -401,6 +401,11 @@
           "type": "integer",
           "minimum": 1
         },
+        "minFreePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 99
+        },
         "intervalSeconds": {
           "type": "integer",
           "minimum": 1

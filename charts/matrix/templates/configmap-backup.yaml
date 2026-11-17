@@ -20,6 +20,7 @@ data:
     WAIT_SECONDS="${WAIT_SECONDS:?}"
     SERVER_PORT="${SERVER_PORT:?}"
     METRICS_PORT="${METRICS_PORT:?}"
+    MIN_FREE_PERCENT="${MIN_FREE_PERCENT:?}"
 
     METRICS_DIR=/metrics
     METRICS_FILE="$METRICS_DIR/metrics"
@@ -128,6 +129,24 @@ data:
       return 1
     }
 
+    has_free_space() {
+      set -- $(df -Pk "$BACKUP_DIR" | awk 'NR==2{print $2, $4}')
+      total=${1-}
+      avail=${2-}
+      case "$total" in ''|*[!0-9]*) total= ;; esac
+      case "$avail" in ''|*[!0-9]*) avail= ;; esac
+      if [ -z "$total" ] || [ -z "$avail" ] || [ "$total" -eq 0 ]; then
+        log "FAILED: could not read the free space of $BACKUP_DIR from df, not creating a backup"
+        return 1
+      fi
+      percent=$((avail * 100 / total))
+      if [ "$percent" -lt "$MIN_FREE_PERCENT" ]; then
+        log "FAILED: only ${percent}% of the volume is free, the minimum is ${MIN_FREE_PERCENT}%, not creating a backup"
+        return 1
+      fi
+      return 0
+    }
+
     create_backup() {
       pid=$1
       before=$2
@@ -197,6 +216,10 @@ data:
         log "unsynced local backup $local_latest (remote: ${remote_latest:-none}), uploading it without creating a new one"
         upload_backup "$local_latest"
         return
+      fi
+
+      if ! has_free_space; then
+        return 1
       fi
 
       if ! create_backup "$pid" "$local_latest"; then

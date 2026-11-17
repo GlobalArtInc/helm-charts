@@ -94,6 +94,7 @@ The chart was published as `tuwunel` up to 0.1.x. `nameOverride` still defaults 
 | `import.enabled` | `false` | Run the Synapse import Job. Requires `replicaCount: 0`. |
 | `backup.enabled` | `false` | Run the backup sidecar. Must be off while `import.enabled` is on. |
 | `backup.retrySeconds` | `900` | Pause before the next attempt after a failed or skipped round. |
+| `backup.minFreePercent` | `20` | Minimum percent of free space on the volume. Below it the sidecar skips the round and does not create a new backup. |
 | `backup.waitSeconds` | `1800` | How long a round waits for the new backup to appear in the repository after the signal. |
 | `backup.startupWaitSeconds` | `1800` | How long the sidecar polls the server (`/_matrix/client/versions` on `service.port`) before the first round. If the server never answers, that round is skipped. |
 | `import.scratch.enabled` | `true` | Write the import database to an `emptyDir` and copy it to the volume after a successful import. See "Where the database is written". |
@@ -516,6 +517,10 @@ With `backup.enabled=true` the chart does three things:
      `server backup-database`, and waits up to `backup.waitSeconds` for the new
      file in `meta/`. A backup is finished when that file appears, because
      RocksDB writes it last.
+
+   Before it sends the signal, the sidecar checks the free space on the volume
+   and skips the round if less than `backup.minFreePercent` (20 by default) is
+   free, so a full volume does not get a new backup.
 
    The upload of that backup:
    - runs `rclone copy` of `shared_checksum/` and `private/`, then of `meta/`,

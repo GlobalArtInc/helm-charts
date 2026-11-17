@@ -141,6 +141,8 @@ spec:
           value: {{ int .Values.service.port | quote }}
         - name: METRICS_PORT
           value: {{ int .Values.backup.metricsPort | quote }}
+        - name: MIN_FREE_PERCENT
+          value: {{ int .Values.backup.minFreePercent | quote }}
         - name: RCLONE_CONFIG_DEST_TYPE
           value: s3
         - name: RCLONE_CONFIG_DEST_PROVIDER
