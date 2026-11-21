@@ -1,0 +1,238 @@
+publicUrl: https://webhooks.example.com
+
+replicaCount: 3
+
+image:
+  repository: registry.example.com/webhooks-live
+  tag: "0.1.0"
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000001
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: registry-example
+
+serviceAccount:
+  create: true
+  annotations:
+    example.com/owner: platform
+
+database:
+  existingSecret:
+    name: webhooks-live-db
+    key: url
+  poolSize: 10
+
+auth:
+  mode: sso
+  sessionIdle: 6h
+  sessionMax: 3d
+  oidc:
+    issuer: https://sso.example.com
+    clientId: webhooks-live
+    scopes:
+      - openid
+      - email
+      - profile
+      - groups
+    providerName: Example SSO
+    clientSecret:
+      existingSecret:
+        name: webhooks-live-oidc
+        key: clientSecret
+
+trustedProxies:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+
+retention: 3d
+
+ringModeAllowed: false
+
+limits:
+  maxCaptures: 1000
+  maxBodyBytes: 5MiB
+  bodyMemoryBudget: 512MiB
+  maxDelayed: 1000
+  storageCapBytes: 50GiB
+
+rateLimits:
+  captureIp: "60/s:120"
+  captureEndpoint: "40/s:200"
+  apiIp: "30/s:60"
+  createIp: "5/m:5"
+
+forward:
+  enabled: true
+  concurrency: 16
+  maxAttempts: 5
+  allowCidrs:
+    - 10.20.0.0/16
+
+shutdown:
+  drain: 5s
+  grace: 20s
+
+log:
+  filter: info
+
+config:
+  EXAMPLE_SETTING: "on"
+
+terminationGracePeriodSeconds: 45
+
+probes:
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 384Mi
+  limits:
+    memory: 1Gi
+
+podAnnotations:
+  example.com/owner: platform
+
+podLabels:
+  example.com/tier: edge
+
+extraEnv:
+  - name: EXAMPLE_EXTRA
+    value: "1"
+
+extraEnvFrom:
+  - secretRef:
+      name: webhooks-live-extra
+
+extraVolumes:
+  - name: scratch
+    emptyDir:
+      sizeLimit: 64Mi
+
+extraVolumeMounts:
+  - name: scratch
+    mountPath: /var/scratch
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations:
+  - key: example.com/dedicated
+    operator: Exists
+    effect: NoSchedule
+
+antiAffinity:
+  mode: soft
+  topologyKey: kubernetes.io/hostname
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: webhooks-live
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+migrations:
+  enabled: true
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 300
+
+route:
+  enabled: true
+  host: webhooks.example.com
+  gateway:
+    name: example-gateway
+    namespace: envoy-gateway-system
+    sectionName: https
+  listenerSet:
+    enabled: true
+  tls:
+    secretName: ""
+    certificate:
+      enabled: true
+      issuer: example-issuer
+    referenceGrant:
+      enabled: true
+  annotations:
+    example.com/owner: platform
+  timeouts:
+    stream: 0s
+    default: 60s
+
+ingress:
+  enabled: true
+  className: nginx
+  host: webhooks-ingress.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  tls:
+    secretName: webhooks-ingress-tls
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: prometheus
+  podAnnotations:
+    enabled: true
+
+networkPolicy:
+  enabled: true
+  ingress:
+    public:
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+    admin:
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+  egress:
+    dns:
+      enabled: true
+    database:
+      to:
+        - ipBlock:
+            cidr: 10.30.0.0/24
+      port: 5432
+    extra:
+      - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+                - 10.0.0.0/8
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+        ports:
+          - port: 443
+            protocol: TCP
+          - port: 80
+            protocol: TCP

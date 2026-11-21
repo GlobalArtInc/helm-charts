@@ -1,0 +1,33 @@
+publicUrl: https://webhooks.example.com
+
+image:
+  repository: registry.example.com/webhooks-live
+  tag: "0.1.0"
+
+database:
+  existingSecret:
+    name: webhooks-live-db
+    key: url
+
+auth:
+  mode: sso
+  oidc:
+    issuer: https://sso.example.com
+    clientId: webhooks-live
+    providerName: Example SSO
+    clientSecret:
+      existingSecret:
+        name: webhooks-live-oidc
+        key: clientSecret
+
+trustedProxies:
+  - 10.0.0.0/8
+
+route:
+  enabled: true
+  host: webhooks.example.com
+  gateway:
+    name: example-gateway
+    namespace: envoy-gateway-system
+  tls:
+    secretName: wildcard-example-com

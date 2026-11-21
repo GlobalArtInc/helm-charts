@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "webhooks-live.fullname" . }}-ingress
+  labels:
+    {{- include "webhooks-live.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "webhooks-live.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingress.public.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    - ports:
+        - port: 9090
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingress.admin.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

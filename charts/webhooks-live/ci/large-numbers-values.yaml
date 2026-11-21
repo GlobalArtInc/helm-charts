@@ -1,0 +1,25 @@
+publicUrl: https://webhooks.example.com
+
+image:
+  repository: registry.example.com/webhooks-live
+  tag: "0.1.0"
+
+database:
+  existingSecret:
+    name: webhooks-live-db
+    key: url
+  poolSize: 100
+
+limits:
+  maxCaptures: 1000000
+  maxBodyBytes: 1073741824
+  bodyMemoryBudget: 4294967296
+  maxDelayed: 100000
+  storageCapBytes: 21474836480
+
+forward:
+  concurrency: 64
+  maxAttempts: 10
+
+config:
+  EXAMPLE_LIMIT: 1000000

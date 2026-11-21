@@ -1,0 +1,9 @@
+publicUrl: https://webhooks.example.com
+
+image:
+  repository: registry.example.com/webhooks-live
+
+database:
+  existingSecret:
+    name: webhooks-live-db
+    key: url

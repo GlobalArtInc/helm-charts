@@ -1,0 +1,69 @@
+{{- if not .Values.publicUrl -}}
+{{- fail "publicUrl is not set. It is the public base URL of webhooks.live, for example https://webhooks.example.com. The server builds the capture URLs from it." -}}
+{{- end -}}
+{{- if not (regexMatch "^https?://" .Values.publicUrl) -}}
+{{- fail (printf "publicUrl is %q. It has to start with http:// or https://, for example https://webhooks.example.com, with no path." .Values.publicUrl) -}}
+{{- end -}}
+{{- if not .Values.image.repository -}}
+{{- fail "image.repository is not set. Pass the repository of the webhooks-live image without a tag, for example registry.example.com/webhooks-live. The chart has no default image." -}}
+{{- end -}}
+{{- if not (has .Values.auth.mode (list "open" "sso")) -}}
+{{- fail (printf "auth.mode is %q. It has to be open or sso: open has no sign-in, sso signs users in through the OIDC provider set in auth.oidc." .Values.auth.mode) -}}
+{{- end -}}
+{{- if or (not .Values.database.existingSecret.name) (not .Values.database.existingSecret.key) -}}
+{{- fail "database.existingSecret.name and database.existingSecret.key have to name the existing Secret and the key that hold the database URL. The chart takes no plain-text database URL: create the Secret first, for example with kubectl create secret generic, and point these two values at it." -}}
+{{- end -}}
+{{- if eq .Values.auth.mode "sso" -}}
+{{- if not .Values.auth.oidc.issuer -}}
+{{- fail "auth.mode is sso and auth.oidc.issuer is not set. Give the issuer URL of the OIDC provider, for example https://sso.example.com." -}}
+{{- end -}}
+{{- if not .Values.auth.oidc.clientId -}}
+{{- fail "auth.mode is sso and auth.oidc.clientId is not set. Give the client ID registered with the OIDC provider for webhooks.live." -}}
+{{- end -}}
+{{- if or (not .Values.auth.oidc.clientSecret.existingSecret.name) (not .Values.auth.oidc.clientSecret.existingSecret.key) -}}
+{{- fail "auth.mode is sso and auth.oidc.clientSecret.existingSecret.name or .key is not set. The client secret is read from an existing Secret: name the Secret and the key that holds the client secret. The chart takes no plain-text client secret." -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.auth.oidc.issuer (not (regexMatch "^https?://" .Values.auth.oidc.issuer)) -}}
+{{- fail (printf "auth.oidc.issuer is %q. It has to start with https:// (or http:// for a loopback address), for example https://sso.example.com." .Values.auth.oidc.issuer) -}}
+{{- end -}}
+{{- if .Values.route.enabled -}}
+{{- if not .Values.route.host -}}
+{{- fail "route.enabled is on and route.host is not set. It is the hostname visitors type, with no scheme and no path. Set route.enabled to false to publish this release some other way." -}}
+{{- end -}}
+{{- if not .Values.route.gateway.name -}}
+{{- fail "route.enabled is on and route.gateway.name is not set. Name the Gateway, in route.gateway.namespace, that the HTTPRoute attaches to." -}}
+{{- end -}}
+{{- if .Values.route.listenerSet.enabled -}}
+{{- if and (not .Values.route.tls.certificate.enabled) (not .Values.route.tls.secretName) -}}
+{{- fail "route.tls.secretName is not set, and route.tls.certificate.enabled is off, so the ListenerSet has no certificate. Name the existing TLS Secret for the host, or enable route.tls.certificate, or set route.listenerSet.enabled to false to attach to a gateway listener that already terminates TLS." -}}
+{{- end -}}
+{{- if and .Values.route.tls.certificate.enabled (not .Values.route.tls.certificate.issuer) -}}
+{{- fail "route.tls.certificate.enabled is on and route.tls.certificate.issuer is not set. Name the ClusterIssuer that signs the certificate." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and (or .Values.route.enabled .Values.ingress.enabled) (not .Values.trustedProxies) -}}
+{{- fail "trustedProxies is empty, but route or ingress publishes webhooks.live. The request then arrives from the address of the gateway or ingress pod, and the server takes that address for the visitor: rate limits would be shared by all visitors, and the scheme and host would be wrong. Set trustedProxies to the pod CIDRs of your gateway or ingress controller, for example 10.42.0.0/16. If you really want every address trusted, set trustedProxies to 0.0.0.0/0 and ::/0." -}}
+{{- end -}}
+{{- if and .Values.ingress.enabled (not .Values.ingress.host) -}}
+{{- fail "ingress.enabled is on and ingress.host is not set. It is the hostname visitors type, with no scheme and no path." -}}
+{{- end -}}
+{{- if and .Values.autoscaling.enabled (lt (int .Values.autoscaling.maxReplicas) (int .Values.autoscaling.minReplicas)) -}}
+{{- fail (printf "autoscaling.maxReplicas is %d and autoscaling.minReplicas is %d. The maximum has to be at least the minimum." (int .Values.autoscaling.maxReplicas) (int .Values.autoscaling.minReplicas)) -}}
+{{- end -}}
+{{- if and .Values.pdb.enabled (not .Values.autoscaling.enabled) (gt (int .Values.replicaCount) 1) (or (kindIs "float64" .Values.pdb.minAvailable) (kindIs "int64" .Values.pdb.minAvailable) (kindIs "int" .Values.pdb.minAvailable)) -}}
+{{- if ge (int .Values.pdb.minAvailable) (int .Values.replicaCount) -}}
+{{- fail (printf "pdb.minAvailable is %d and replicaCount is %d. The budget has to leave one pod free to evict, so minAvailable has to be below replicaCount: set it to at most %d, or set pdb.enabled to false." (int .Values.pdb.minAvailable) (int .Values.replicaCount) (sub (int .Values.replicaCount) 1)) -}}
+{{- end -}}
+{{- end -}}
+{{- $drainMs := int (include "webhooks-live.milliseconds" .Values.shutdown.drain) -}}
+{{- $graceMs := int (include "webhooks-live.milliseconds" .Values.shutdown.grace) -}}
+{{- $shutdownMs := add $drainMs $graceMs -}}
+{{- $needMs := add $shutdownMs 5000 -}}
+{{- if lt (mul (int .Values.terminationGracePeriodSeconds) 1000) $needMs -}}
+{{- fail (printf "terminationGracePeriodSeconds is %d, and shutdown.drain and shutdown.grace take %d seconds together. The pod needs at least 5 seconds more than that, so set terminationGracePeriodSeconds to at least %d, or the kubelet kills the server before it has finished." (int .Values.terminationGracePeriodSeconds) (div $shutdownMs 1000) (div (add $needMs 999) 1000)) -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.egress.database.to) -}}
+{{- fail "networkPolicy.enabled is on and networkPolicy.egress.database.to is empty. The egress policy then has no rule for the database, so the server and the migration Job cannot reach PostgreSQL. Give the database destination in networkPolicy.egress.database.to, for example an ipBlock with the database CIDR or a podSelector." -}}
+{{- end -}}

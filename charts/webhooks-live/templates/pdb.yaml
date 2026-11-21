@@ -1,0 +1,14 @@
+{{- $minReplicas := ternary .Values.autoscaling.minReplicas .Values.replicaCount .Values.autoscaling.enabled }}
+{{- if and .Values.pdb.enabled (gt (int $minReplicas) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "webhooks-live.fullname" . }}
+  labels:
+    {{- include "webhooks-live.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "webhooks-live.selectorLabels" . | nindent 6 }}
+{{- end }}

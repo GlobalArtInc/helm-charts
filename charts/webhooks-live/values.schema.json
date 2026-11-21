@@ -1,0 +1,833 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "webhooks-live",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "secretKeyRef": {
+      "type": "object",
+      "description": "A key in an existing Secret in the release namespace. The chart renders only this reference, never the value.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the existing Secret."
+        },
+        "key": {
+          "type": "string",
+          "description": "Key inside the Secret."
+        }
+      },
+      "additionalProperties": false
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^([0-9]+(ms|s|m|h|d|w))+$",
+      "description": "Duration such as 5s, 12h or 7d. Units: ms, s, m, h, d, w."
+    },
+    "gatewayDuration": {
+      "type": "string",
+      "pattern": "^([0-9]{1,5}(h|m|s|ms)){1,4}$",
+      "description": "Gateway API duration such as 0s, 60s or 1m30s, as the HTTPRoute timeouts field takes it. Units: ms, s, m, h only; no d or w."
+    },
+    "byteSize": {
+      "type": [
+        "integer",
+        "string"
+      ],
+      "description": "Size in bytes as an integer, or with a unit such as 10MiB, 256MiB or 20GiB."
+    },
+    "rateSpec": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*/[sm]:[1-9][0-9]*$",
+      "description": "Rate as count/unit:burst, for example 30/s:60. Unit s is per second, m is per minute."
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "objectList": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "freeObject": {
+      "type": "object"
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "peers": {
+      "type": "array",
+      "description": "Kubernetes NetworkPolicy peers: podSelector, namespaceSelector or ipBlock entries.",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Reserved by Helm for parent charts. Not used by this chart."
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Overrides the chart name used in resource names and the app.kubernetes.io/name label."
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Overrides the full resource name. Empty means the release name, combined with the chart name when the release name does not contain it."
+    },
+    "publicUrl": {
+      "type": "string",
+      "description": "Public base URL of webhooks.live, for example https://webhooks.example.com. Required; the chart fails when it is empty. Rendered as WEBHOOKS_LIVE_PUBLIC_URL."
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of stateless server replicas. Ignored when autoscaling is enabled. Replicas share one database and need no sticky sessions."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Image repository without tag, for example registry.example.com/webhooks-live. Required; the chart fails when it is empty."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag. Empty means the chart appVersion."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[0-9a-f]{64})?$",
+          "description": "Optional image digest in the form sha256:<64 hex>. When set, the image is pinned to it and the tag is kept only as a label."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ],
+          "description": "Image pull policy of the server and migration containers."
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "description": "Names of image pull Secrets, as Kubernetes LocalObjectReference entries.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create a ServiceAccount named after the release. When false, the server uses the name below, or the namespace default ServiceAccount."
+        },
+        "name": {
+          "type": "string",
+          "description": "ServiceAccount name. Empty means the release fullname when create is true, and default when it is false."
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap",
+          "description": "Annotations of the ServiceAccount, for example for workload identity."
+        }
+      }
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean",
+      "description": "Mount the ServiceAccount token into the pods. webhooks.live does not call the Kubernetes API, so it stays false."
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PostgreSQL connection. The database URL is read from an existing Secret; the chart has no value for a plain-text URL.",
+      "properties": {
+        "existingSecret": {
+          "$ref": "#/definitions/secretKeyRef",
+          "description": "Existing Secret and key that hold the full database URL, rendered as WEBHOOKS_LIVE_DATABASE_URL. Both name and key are required; the chart fails when either is empty."
+        },
+        "poolSize": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Connections per replica, rendered as WEBHOOKS_LIVE_DB_POOL_SIZE. The server refuses fewer than 2. Use at least 3 in practice: migrations take 2 and the change listener holds 1 for its lifetime."
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "open",
+            "sso"
+          ],
+          "description": "open: no sign-in. sso: sign-in through the OIDC provider in auth.oidc. Rendered as WEBHOOKS_LIVE_AUTH_MODE."
+        },
+        "sessionIdle": {
+          "$ref": "#/definitions/duration",
+          "description": "Session lifetime without activity, rendered as WEBHOOKS_LIVE_SESSION_IDLE. Used in sso mode."
+        },
+        "sessionMax": {
+          "$ref": "#/definitions/duration",
+          "description": "Maximum session lifetime, rendered as WEBHOOKS_LIVE_SESSION_MAX. Used in sso mode."
+        },
+        "oidc": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "OIDC provider settings. Rendered only in sso mode, where issuer, clientId and clientSecret.existingSecret are required.",
+          "properties": {
+            "issuer": {
+              "type": "string",
+              "description": "OIDC issuer URL, for example https://sso.example.com. Required in sso mode."
+            },
+            "clientId": {
+              "type": "string",
+              "description": "OIDC client ID. Required in sso mode."
+            },
+            "scopes": {
+              "$ref": "#/definitions/stringList",
+              "description": "OIDC scopes, rendered space-separated as WEBHOOKS_LIVE_OIDC_SCOPES."
+            },
+            "providerName": {
+              "type": "string",
+              "description": "Name shown on the sign-in button. Empty leaves the neutral label of the UI."
+            },
+            "clientSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The OIDC client secret is read from an existing Secret. The chart has no value for a plain-text secret.",
+              "properties": {
+                "existingSecret": {
+                  "$ref": "#/definitions/secretKeyRef",
+                  "description": "Existing Secret and key that hold the client secret. Required in sso mode; the chart fails when either part is empty."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "trustedProxies": {
+      "$ref": "#/definitions/stringList",
+      "description": "Proxy addresses or CIDRs whose X-Forwarded-For header is trusted, rendered comma-separated as WEBHOOKS_LIVE_TRUSTED_PROXIES. Empty trusts no proxy."
+    },
+    "retention": {
+      "$ref": "#/definitions/duration",
+      "description": "How long captures are kept, rendered as WEBHOOKS_LIVE_RETENTION."
+    },
+    "ringModeAllowed": {
+      "type": "boolean",
+      "description": "Allow endpoints with overflow: ring. false rejects it. Rendered as WEBHOOKS_LIVE_RING_MODE_ALLOWED."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxCaptures": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Captures kept per endpoint, rendered as WEBHOOKS_LIVE_MAX_CAPTURES."
+        },
+        "maxBodyBytes": {
+          "$ref": "#/definitions/byteSize",
+          "description": "Largest accepted request body, rendered as WEBHOOKS_LIVE_MAX_BODY_BYTES."
+        },
+        "bodyMemoryBudget": {
+          "$ref": "#/definitions/byteSize",
+          "description": "Memory for request bodies in flight per replica, rendered as WEBHOOKS_LIVE_BODY_MEMORY_BUDGET. The container memory limit must leave room for it."
+        },
+        "maxDelayed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Responses delayed at once per replica, rendered as WEBHOOKS_LIVE_MAX_DELAYED."
+        },
+        "storageCapBytes": {
+          "$ref": "#/definitions/byteSize",
+          "description": "Storage cap for all captures, rendered as WEBHOOKS_LIVE_STORAGE_CAP_BYTES."
+        }
+      }
+    },
+    "rateLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Rate limits. Each replica counts on its own, so the effective limit grows with the replica count.",
+      "properties": {
+        "captureIp": {
+          "$ref": "#/definitions/rateSpec",
+          "description": "Captures per client IP, rendered as WEBHOOKS_LIVE_RATE_CAPTURE_IP."
+        },
+        "captureEndpoint": {
+          "$ref": "#/definitions/rateSpec",
+          "description": "Captures per endpoint, rendered as WEBHOOKS_LIVE_RATE_CAPTURE_ENDPOINT."
+        },
+        "apiIp": {
+          "$ref": "#/definitions/rateSpec",
+          "description": "API requests per client IP, rendered as WEBHOOKS_LIVE_RATE_API_IP."
+        },
+        "createIp": {
+          "$ref": "#/definitions/rateSpec",
+          "description": "Endpoint creation per client IP, rendered as WEBHOOKS_LIVE_RATE_CREATE_IP."
+        }
+      }
+    },
+    "forward": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Run the forwarding worker, rendered as WEBHOOKS_LIVE_FORWARD_ENABLED."
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Parallel forward attempts per replica, rendered as WEBHOOKS_LIVE_FORWARD_CONCURRENCY."
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Attempts per forwarded capture, rendered as WEBHOOKS_LIVE_FORWARD_MAX_ATTEMPTS."
+        },
+        "allowCidrs": {
+          "$ref": "#/definitions/stringList",
+          "description": "CIDRs that forwarding may reach although the SSRF guard blocks them, rendered comma-separated as WEBHOOKS_LIVE_FORWARD_ALLOW_CIDRS. Empty allows none."
+        }
+      }
+    },
+    "shutdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "drain": {
+          "$ref": "#/definitions/duration",
+          "description": "Time after SIGTERM, with readiness already at 503, for the gateway to take the pod out of rotation. Rendered as WEBHOOKS_LIVE_SHUTDOWN_DRAIN."
+        },
+        "grace": {
+          "$ref": "#/definitions/duration",
+          "description": "Time after the drain for in-flight work before the hard stop. Rendered as WEBHOOKS_LIVE_SHUTDOWN_GRACE. drain plus grace must stay below terminationGracePeriodSeconds."
+        }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "type": "string",
+          "description": "Log filter in EnvFilter syntax, for example info or info,whl_core=debug. Rendered as WEBHOOKS_LIVE_LOG."
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Extra environment for settings the chart does not model yet. Each key K is rendered as the variable WEBHOOKS_LIVE_K with the value as text. Keys must be upper case with digits and underscores. Keys the chart sets from structured values, and the keys that point the server at its config file or at fixed ports, are refused: set them through their own values.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "not": {
+          "enum": [
+            "PUBLIC_URL",
+            "DATABASE_URL",
+            "DB_POOL_SIZE",
+            "AUTH_MODE",
+            "OIDC_ISSUER",
+            "OIDC_CLIENT_ID",
+            "OIDC_CLIENT_SECRET",
+            "OIDC_SCOPES",
+            "OIDC_PROVIDER_NAME",
+            "SESSION_IDLE",
+            "SESSION_MAX",
+            "TRUSTED_PROXIES",
+            "RETENTION",
+            "RING_MODE_ALLOWED",
+            "MAX_CAPTURES",
+            "MAX_BODY_BYTES",
+            "BODY_MEMORY_BUDGET",
+            "MAX_DELAYED",
+            "STORAGE_CAP_BYTES",
+            "RATE_CAPTURE_IP",
+            "RATE_CAPTURE_ENDPOINT",
+            "RATE_API_IP",
+            "RATE_CREATE_IP",
+            "FORWARD_ENABLED",
+            "FORWARD_CONCURRENCY",
+            "FORWARD_MAX_ATTEMPTS",
+            "FORWARD_ALLOW_CIDRS",
+            "SHUTDOWN_DRAIN",
+            "SHUTDOWN_GRACE",
+            "LOG",
+            "LISTEN_ADDR",
+            "ADMIN_ADDR",
+            "CONFIG"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Kubernetes grace period for the pod. Must exceed shutdown.drain plus shutdown.grace."
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Timing of the probes. Paths are fixed: /readyz and /healthz on the admin port 9090. The startup probe covers the first database connection and the schema check.",
+      "properties": {
+        "startup": {
+          "$ref": "#/definitions/probe"
+        },
+        "readiness": {
+          "$ref": "#/definitions/probe"
+        },
+        "liveness": {
+          "$ref": "#/definitions/probe"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Container resources. The default sets no CPU limit on purpose: a CPU limit throttles the server without protecting the others."
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Extra annotations on the server pods."
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Extra labels on the server pods."
+    },
+    "podSecurityContext": {
+      "$ref": "#/definitions/freeObject",
+      "description": "Pod-level security context of the server and migration pods. Empty by default; the container context carries the restrictions."
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container security context of the server and migration containers. Defaults run as the distroless nonroot user with a read-only root filesystem and no capabilities."
+    },
+    "extraEnv": {
+      "$ref": "#/definitions/objectList",
+      "description": "Extra environment variables for the server and migration containers, as Kubernetes EnvVar entries."
+    },
+    "extraEnvFrom": {
+      "$ref": "#/definitions/objectList",
+      "description": "Extra envFrom sources for the server and migration containers, for example a Secret with further settings."
+    },
+    "extraVolumes": {
+      "$ref": "#/definitions/objectList",
+      "description": "Extra volumes for the server pods."
+    },
+    "extraVolumeMounts": {
+      "$ref": "#/definitions/objectList",
+      "description": "Extra volume mounts for the server container."
+    },
+    "nodeSelector": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Node selector of the server and migration pods."
+    },
+    "tolerations": {
+      "type": "array",
+      "description": "Tolerations of the server and migration pods.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "affinity": {
+      "$ref": "#/definitions/freeObject",
+      "description": "Full affinity of the server pods. When set, it replaces the pod anti-affinity built from antiAffinity."
+    },
+    "antiAffinity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Spreads the server replicas over nodes. Ignored when affinity is set.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "soft",
+            "hard",
+            "none"
+          ],
+          "description": "soft prefers other nodes and still schedules when there is no room. hard requires them, so a pod stays Pending without room. none adds no anti-affinity."
+        },
+        "topologyKey": {
+          "type": "string",
+          "description": "Node label that marks the failure domain, usually kubernetes.io/hostname."
+        }
+      }
+    },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "description": "Topology spread constraints of the server pods, as Kubernetes entries.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "PodDisruptionBudget of the server. Rendered only when the server runs more than one replica.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render the PodDisruptionBudget when there is more than one replica."
+        },
+        "minAvailable": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "minAvailable of the budget: a count or a percentage such as 50%."
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "HorizontalPodAutoscaler of the server, on CPU utilisation. When enabled, replicaCount is not rendered and minReplicas sets the floor.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render a HorizontalPodAutoscaler (autoscaling/v2)."
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Lowest replica count."
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Highest replica count. Must be at least minReplicas."
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Average CPU utilisation of the requests that the autoscaler aims for."
+        }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Database migration Job, run as a Helm hook before install and upgrade. Disable it when migrations run elsewhere; the server then refuses to start on an old schema.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Run `webhooks-live migrate up` as a pre-install and pre-upgrade hook."
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Retries of the migration Job before the release fails."
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Time limit of the migration Job in seconds."
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds a finished migration Job is kept. A failed Job is kept until then so its logs can be read; a successful one is deleted by its hook policy."
+        },
+        "extraVolumes": {
+          "$ref": "#/definitions/objectList",
+          "description": "Extra volumes for the migration Job only. The server pods do not get them; use extraVolumes for those."
+        },
+        "extraVolumeMounts": {
+          "$ref": "#/definitions/objectList",
+          "description": "Extra volume mounts for the migration container only, matching migrations.extraVolumes."
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Publishing through the Gateway API: an HTTPRoute on the gateway listener, with TLS terminated at the gateway.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render the HTTPRoute and, with listenerSet, the ListenerSet and the certificate objects."
+        },
+        "host": {
+          "type": "string",
+          "description": "Public hostname, without scheme and path. Required when route.enabled is true."
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the Gateway. Required when route.enabled is true."
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace of the Gateway."
+            },
+            "sectionName": {
+              "type": "string",
+              "description": "Listener of the Gateway to attach to. Used only when listenerSet is false."
+            }
+          }
+        },
+        "listenerSet": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create a ListenerSet on the gateway for this host and attach the route to it. false attaches the route to an existing gateway listener."
+            }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string",
+              "description": "Name of the TLS Secret for the host. Required with listenerSet unless certificate.enabled is true."
+            },
+            "secretNamespace": {
+              "type": "string",
+              "description": "Namespace of a TLS Secret that lives elsewhere. A ReferenceGrant in that namespace is not created by this chart."
+            },
+            "certificate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Order a cert-manager Certificate for the host into secretName."
+                },
+                "issuer": {
+                  "type": "string",
+                  "description": "Name of the ClusterIssuer that signs the certificate. Required when certificate.enabled is true."
+                }
+              }
+            },
+            "referenceGrant": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Create a ReferenceGrant that lets the gateway read the TLS Secret in this namespace."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Name of the ReferenceGrant. Empty means <fullname>-tls-read."
+                }
+              }
+            }
+          }
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap",
+          "description": "Annotations of the HTTPRoute."
+        },
+        "timeouts": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Request timeouts of the two HTTPRoute rules. 0s means no timeout.",
+          "properties": {
+            "stream": {
+              "$ref": "#/definitions/gatewayDuration",
+              "description": "Request timeout for the live stream path /api/v1/endpoints/<id>/stream. Server-Sent Events are long-lived; keep 0s, or the stream closes after the timeout."
+            },
+            "default": {
+              "$ref": "#/definitions/gatewayDuration",
+              "description": "Request timeout for every other path."
+            }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Publishing through a Kubernetes Ingress, as an alternative to the route. Long-lived SSE needs proxy read timeouts raised and buffering off; see the README.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render an Ingress with a single path / to the server."
+        },
+        "className": {
+          "type": "string",
+          "description": "ingressClassName of the Ingress."
+        },
+        "host": {
+          "type": "string",
+          "description": "Public hostname. Required when ingress.enabled is true."
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap",
+          "description": "Annotations of the Ingress, for example the controller's proxy read timeout and proxy buffering settings for the stream."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string",
+              "description": "Name of the TLS Secret for the host. Empty renders no TLS block."
+            }
+          }
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Prometheus operator ServiceMonitor that scrapes /metrics on the admin port. Needs the monitoring.coreos.com/v1 CRD.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Render the ServiceMonitor."
+            },
+            "interval": {
+              "$ref": "#/definitions/duration",
+              "description": "Scrape interval."
+            },
+            "labels": {
+              "$ref": "#/definitions/stringMap",
+              "description": "Extra labels on the ServiceMonitor, for example the label the Prometheus instance selects on."
+            }
+          }
+        },
+        "podAnnotations": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Plain scrape annotations for setups without the Prometheus operator.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Add prometheus.io/scrape, prometheus.io/port (9090) and prometheus.io/path (/metrics) to the server pods."
+            }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional NetworkPolicy of the server pods. Empty peer lists allow any source or destination for that rule; the README lists the ports.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Render the NetworkPolicy. Ingress and egress are restricted to the rules below once it exists."
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "public": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "$ref": "#/definitions/peers",
+                  "description": "Sources allowed to reach port 8080, for example the gateway's namespace. Empty allows any source."
+                }
+              }
+            },
+            "admin": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "$ref": "#/definitions/peers",
+                  "description": "Sources allowed to reach port 9090, for example the monitoring namespace. Empty allows any source, including the kubelet probes."
+                }
+              }
+            }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Allow DNS (port 53, UDP and TCP) to the destinations in to."
+                },
+                "to": {
+                  "$ref": "#/definitions/peers",
+                  "description": "DNS destinations. The default is the kube-dns pods in kube-system."
+                }
+              }
+            },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "to": {
+                  "$ref": "#/definitions/peers",
+                  "description": "Destinations of the database, for example an ipBlock with the database CIDR or a podSelector. Required when networkPolicy.enabled is true: with no database rule the egress policy closes the database to the server and the migration Job, and the chart fails to render."
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "Database port."
+                }
+              }
+            },
+            "extra": {
+              "$ref": "#/definitions/objectList",
+              "description": "Further egress rules, as NetworkPolicyEgressRule entries. Forwarding to arbitrary targets needs its destinations here."
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{{ .Chart.Name }} {{ .Chart.Version }} is installed as {{ .Release.Name }}.
+
+The public API, the UI and the captures listen on port 8080 of the service {{ include "webhooks-live.fullname" . }}. The probes and the metrics are on port 9090 of the service {{ include "webhooks-live.fullname" . }}-admin, which nothing publishes.
+{{- if .Values.route.enabled }}
+
+Gateway API: https://{{ .Values.route.host }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+
+Ingress: https://{{ .Values.ingress.host }}
+{{- end }}
+{{- if or .Values.route.enabled .Values.ingress.enabled }}
+
+Trusted proxies: {{ join ", " .Values.trustedProxies }}. The server takes the visitor's address, scheme and host from X-Forwarded-For only when the request comes from these addresses. Keep them at the pod CIDRs of your gateway or ingress controller; otherwise every visitor appears to come from the proxy.
+{{- end }}
+{{- if .Values.migrations.enabled }}
+
+The database migrations ran as a Helm hook, in the Job {{ include "webhooks-live.fullname" . }}-migrate. A successful Job is deleted by its hook policy.
+{{- else }}
+
+Migrations are disabled. The server refuses to start while the database schema is behind the image, so run "webhooks-live migrate up" from the same image before this release starts.
+{{- end }}
+
+To reach it without publishing anything:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "webhooks-live.fullname" . }} 8080:8080
+
+To read the probes and the metrics:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "webhooks-live.fullname" . }}-admin 9090:9090
+  curl http://localhost:9090/readyz
+  curl http://localhost:9090/metrics

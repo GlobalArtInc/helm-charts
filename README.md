@@ -13,6 +13,7 @@ This repository contains [Helm](https://helm.sh) charts for various projects
 * [Matrix Hookshot](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/matrix-hookshot)
 * [Synapse admin UI (Ketesa)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/synapse-admin)
 * [Synapse secrets (signing key, appservices)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/synapse-secrets)
+* [webhooks.live (self-hosted HTTP request catcher)](https://github.com/GlobalArtInc/helm-charts/tree/main/charts/webhooks-live)
 
 ## Usage
 

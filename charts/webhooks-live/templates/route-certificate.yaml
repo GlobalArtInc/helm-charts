@@ -1,0 +1,17 @@
+{{- if and .Values.route.enabled .Values.route.listenerSet.enabled .Values.route.tls.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "webhooks-live.route.tlsSecretName" . }}
+  labels:
+    {{- include "webhooks-live.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "webhooks-live.route.tlsSecretName" . }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ .Values.route.tls.certificate.issuer }}
+  commonName: {{ .Values.route.host }}
+  dnsNames:
+    - {{ .Values.route.host }}
+{{- end }}

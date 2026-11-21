@@ -1,0 +1,19 @@
+apiVersion: v2
+name: webhooks-live
+description: webhooks.live, a self-hosted HTTP request catcher, on PostgreSQL
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/GlobalArtInc/helm-charts
+sources:
+  - https://github.com/GlobalArtInc/webhooks-live
+  - https://github.com/GlobalArtInc/helm-charts/tree/main/charts/webhooks-live
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.dev
+keywords:
+  - webhooks
+  - request-catcher
+  - http
+  - sse
+kubeVersion: ">=1.26.0-0"

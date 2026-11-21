@@ -1,0 +1,49 @@
+{{- if .Values.route.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "webhooks-live.fullname" . }}-route
+  labels:
+    {{- include "webhooks-live.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- if .Values.route.listenerSet.enabled }}
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: {{ include "webhooks-live.fullname" . }}-listeners
+      sectionName: https
+    {{- else }}
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.route.gateway.name }}
+      namespace: {{ .Values.route.gateway.namespace }}
+      {{- with .Values.route.gateway.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+    {{- end }}
+  hostnames:
+    - {{ .Values.route.host | quote }}
+  rules:
+    - matches:
+        - path:
+            type: RegularExpression
+            value: "^/api/v1/endpoints/[^/]+/stream$"
+      backendRefs:
+        - name: {{ include "webhooks-live.fullname" . }}
+          port: 8080
+      timeouts:
+        request: {{ .Values.route.timeouts.stream | quote }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "webhooks-live.fullname" . }}
+          port: 8080
+      timeouts:
+        request: {{ .Values.route.timeouts.default | quote }}
+{{- end }}

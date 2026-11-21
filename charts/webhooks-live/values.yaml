@@ -1,0 +1,211 @@
+nameOverride: ""
+fullnameOverride: ""
+
+publicUrl: ""
+
+replicaCount: 2
+
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+automountServiceAccountToken: false
+
+database:
+  existingSecret:
+    name: ""
+    key: ""
+  poolSize: 20
+
+auth:
+  mode: open
+  sessionIdle: 12h
+  sessionMax: 7d
+  oidc:
+    issuer: ""
+    clientId: ""
+    scopes:
+      - openid
+      - email
+      - profile
+    providerName: ""
+    clientSecret:
+      existingSecret:
+        name: ""
+        key: ""
+
+trustedProxies: []
+
+retention: 7d
+
+ringModeAllowed: true
+
+limits:
+  maxCaptures: 500
+  maxBodyBytes: 10MiB
+  bodyMemoryBudget: 256MiB
+  maxDelayed: 2000
+  storageCapBytes: 20GiB
+
+rateLimits:
+  captureIp: "30/s:60"
+  captureEndpoint: "20/s:100"
+  apiIp: "20/s:40"
+  createIp: "10/m:10"
+
+forward:
+  enabled: true
+  concurrency: 32
+  maxAttempts: 3
+  allowCidrs: []
+
+shutdown:
+  drain: 5s
+  grace: 25s
+
+log:
+  filter: info
+
+config: {}
+
+terminationGracePeriodSeconds: 40
+
+probes:
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 768Mi
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+antiAffinity:
+  mode: soft
+  topologyKey: kubernetes.io/hostname
+
+topologySpreadConstraints: []
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+migrations:
+  enabled: true
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 600
+  extraVolumes: []
+  extraVolumeMounts: []
+
+route:
+  enabled: false
+  host: ""
+  gateway:
+    name: ""
+    namespace: envoy-gateway-system
+    sectionName: ""
+  listenerSet:
+    enabled: true
+  tls:
+    secretName: ""
+    secretNamespace: ""
+    certificate:
+      enabled: false
+      issuer: ""
+    referenceGrant:
+      enabled: true
+      name: ""
+  annotations: {}
+  timeouts:
+    stream: 0s
+    default: 60s
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls:
+    secretName: ""
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  podAnnotations:
+    enabled: false
+
+networkPolicy:
+  enabled: false
+  ingress:
+    public:
+      from: []
+    admin:
+      from: []
+  egress:
+    dns:
+      enabled: true
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    database:
+      to: []
+      port: 5432
+    extra: []
