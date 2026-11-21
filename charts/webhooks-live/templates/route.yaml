@@ -31,12 +31,24 @@ spec:
     - matches:
         - path:
             type: RegularExpression
-            value: "^/api/v1/endpoints/[^/]+/stream$"
+            value: "^/api/v1/(endpoints/[^/]+|inbox)/stream$"
       backendRefs:
         - name: {{ include "webhooks-live.fullname" . }}
           port: 8080
       timeouts:
         request: {{ .Values.route.timeouts.stream | quote }}
+    - matches:
+        - path:
+            type: RegularExpression
+            value: "^/api/v1/endpoints/[^/]+/export$"
+        - path:
+            type: RegularExpression
+            value: "^/api/v1/endpoints/(import|[^/]+/import)$"
+      backendRefs:
+        - name: {{ include "webhooks-live.fullname" . }}
+          port: 8080
+      timeouts:
+        request: {{ .Values.route.timeouts.long | quote }}
     - matches:
         - path:
             type: PathPrefix

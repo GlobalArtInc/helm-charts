@@ -170,6 +170,7 @@ route:
   annotations: {}
   timeouts:
     stream: 0s
+    long: 0s
     default: 60s
 
 ingress:

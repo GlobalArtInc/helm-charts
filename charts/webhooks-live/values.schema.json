@@ -669,11 +669,15 @@
         "timeouts": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Request timeouts of the two HTTPRoute rules. 0s means no timeout.",
+          "description": "Request timeouts of the three HTTPRoute rules. 0s means no timeout.",
           "properties": {
             "stream": {
               "$ref": "#/definitions/gatewayDuration",
-              "description": "Request timeout for the live stream path /api/v1/endpoints/<id>/stream. Server-Sent Events are long-lived; keep 0s, or the stream closes after the timeout."
+              "description": "Request timeout for the live stream paths /api/v1/endpoints/<id>/stream and /api/v1/inbox/stream. Server-Sent Events are long-lived; keep 0s, or the stream closes after the timeout."
+            },
+            "long": {
+              "$ref": "#/definitions/gatewayDuration",
+              "description": "Request timeout for the export and import paths, /api/v1/endpoints/<id>/export and /api/v1/endpoints/import. Long transfers; keep 0s, or a large transfer is cut at the timeout."
             },
             "default": {
               "$ref": "#/definitions/gatewayDuration",
