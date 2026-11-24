@@ -1,0 +1,34 @@
+{{ .Chart.Name }} {{ .Chart.Version }} is installed as {{ .Release.Name }}.
+
+jauntd listens on the Service {{ include "jaunt.fullname" . }}:
+  http   {{ .Values.service.ports.http.port }}  control, web and device login, plain HTTP: TLS is terminated in front of it
+{{- if .Values.agents.enabled }}
+  agents {{ .Values.service.ports.agents.port }}  node agents, TLS with mutual authentication done by jauntd itself: do not terminate it
+{{- end }}
+{{- if .Values.sshGate.enabled }}
+
+and on the Service {{ include "jaunt.fullname" . }}-ssh:
+  ssh    {{ .Values.service.ssh.port }}  the SSH gate, type {{ .Values.service.ssh.type }}{{ if eq .Values.service.ssh.type "NodePort" }}{{ with .Values.service.ssh.nodePort }}, node port {{ . }}{{ end }}, externalTrafficPolicy {{ .Values.service.ssh.externalTrafficPolicy }}{{ end }}{{ if .Values.sshGate.proxyProtocol }}; PROXY protocol v2 required from {{ join ", " .Values.sshGate.trustedProxies }}{{ end }}
+{{- end }}
+
+OIDC redirect URI to register with the provider: {{ (fromYaml (include "jaunt.config" .)).public_url }}/v1/login/callback
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence.enabled is false. The certificate authority and the database live in an emptyDir and are lost when the pod restarts.
+{{- end }}
+{{- if .Values.ca.init.enabled }}
+
+The Job {{ include "jaunt.fullname" . }}-ca-init runs "jauntd ca init" once. It prints only public data (the CA public keys and the internal root's SHA-256). The daemon pod fails to start until it succeeds and is restarted by the kubelet after it. When it has succeeded, set ca.init.enabled=false on the next upgrade: a second run fails, because the authority already exists.
+
+  kubectl logs -n {{ .Release.Namespace }} job/{{ include "jaunt.fullname" . }}-ca-init
+{{- else }}
+
+The certificate authority is created once with "jauntd ca init"; see the README, section First run. The daemon does not start without it.
+{{- end }}
+
+The access policy is mounted from {{ include "jaunt.policyConfigMapName" . }} and reloaded without a restart. An empty policy denies everything.
+
+To reach the control port without publishing anything:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "jaunt.fullname" . }} {{ .Values.service.ports.http.port }}:{{ .Values.service.ports.http.port }}
+  curl http://localhost:{{ .Values.service.ports.http.port }}/healthz

@@ -1,0 +1,62 @@
+publicUrl: https://jaunt.example.org
+sshSuffix: ssh.example.org
+agentEndpoint: agents.example.org:443
+gateEndpoint: gate.example.org:2200
+
+image:
+  repository: registry.example.org/jaunt
+
+oidc:
+  issuerUrl: https://sso.example.org
+  clientId: jaunt
+  clientSecret:
+    name: jaunt-oidc
+    key: client-secret
+
+ca:
+  identitySecret:
+    name: jaunt-ca-identity
+    key: identity
+
+sshGate:
+  enabled: true
+  hostnames:
+    - gate.example.org
+    - gate2.example.org
+
+service:
+  type: NodePort
+  ports:
+    http:
+      nodePort: 30443
+    agents:
+      nodePort: 30444
+
+persistence:
+  existingClaim: jaunt-data
+
+policy:
+  existingConfigMap: jaunt-policy
+
+route:
+  gateway:
+    name: example-gateway
+    namespace: envoy-gateway-system
+  listenerSet:
+    enabled: false
+  http:
+    enabled: true
+    sectionName: https
+    timeouts:
+      request: 60s
+    redirect:
+      enabled: true
+      sectionName: http
+      port: 8443
+  agents:
+    enabled: true
+    host: agents.example.org
+    sectionName: agents
+  ssh:
+    enabled: true
+    sectionName: ssh

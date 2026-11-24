@@ -1,0 +1,21 @@
+{{- if .Values.route.agents.enabled }}
+apiVersion: {{ include "jaunt.route.apiVersion" (dict "ctx" . "kind" "TLSRoute" "explicit" .Values.route.agents.apiVersion "fallback" "gateway.networking.k8s.io/v1") }}
+kind: TLSRoute
+metadata:
+  name: {{ include "jaunt.fullname" . }}-agents
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- include "jaunt.parentRef" (dict "ctx" . "listener" "agents" "sectionName" .Values.route.agents.sectionName) | nindent 4 }}
+  hostnames:
+    - {{ include "jaunt.route.agentsHost" . | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ include "jaunt.fullname" . }}
+          port: {{ .Values.service.ports.agents.port }}
+{{- end }}

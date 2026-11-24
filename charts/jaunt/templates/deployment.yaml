@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jaunt.fullname" . }}
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "jaunt.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jaunt.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "jaunt.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "jaunt.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: jauntd
+          image: {{ include "jaunt.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.image.command | nindent 12 }}
+          args:
+            - --config
+            - {{ include "jaunt.paths.config" . }}
+            - run
+          ports:
+            - name: http
+              containerPort: {{ .Values.ports.http }}
+              protocol: TCP
+            {{- if .Values.agents.enabled }}
+            - name: agents
+              containerPort: {{ .Values.ports.agents }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.sshGate.enabled }}
+            - name: ssh
+              containerPort: {{ .Values.ports.ssh }}
+              protocol: TCP
+            {{- end }}
+          env:
+            {{- include "jaunt.env" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.probes.startup | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- include "jaunt.volumeMounts.common" . | nindent 12 }}
+            - name: policy
+              mountPath: {{ include "jaunt.paths.policy" . }}
+              readOnly: true
+            - name: oidc-secret
+              mountPath: /run/secrets/jaunt/oidc
+              readOnly: true
+            {{- if .Values.oidc.extraRootCertificates.name }}
+            - name: oidc-roots
+              mountPath: /etc/jaunt/trust
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "jaunt.volumes.common" . | nindent 8 }}
+        - name: policy
+          configMap:
+            name: {{ include "jaunt.policyConfigMapName" . }}
+        - name: oidc-secret
+          secret:
+            secretName: {{ .Values.oidc.clientSecret.name | quote }}
+            defaultMode: 256 # octal 0400
+            items:
+              - key: {{ .Values.oidc.clientSecret.key | quote }}
+                path: client-secret
+        {{- if .Values.oidc.extraRootCertificates.name }}
+        - name: oidc-roots
+          configMap:
+            name: {{ .Values.oidc.extraRootCertificates.name | quote }}
+            items:
+              - key: {{ .Values.oidc.extraRootCertificates.key | quote }}
+                path: oidc-roots.pem
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

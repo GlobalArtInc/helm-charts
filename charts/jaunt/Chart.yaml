@@ -1,0 +1,21 @@
+apiVersion: v2
+name: jaunt
+description: Jaunt, an identity-aware SSH access gateway, control and gate daemon (jauntd) on a SQLite volume
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/GlobalArtInc/helm-charts
+sources:
+  - https://github.com/GlobalArtInc/jaunt
+  - https://github.com/GlobalArtInc/helm-charts/tree/main/charts/jaunt
+maintainers:
+  - name: GlobalArt Inc
+    email: support@globalart.dev
+keywords:
+  - jaunt
+  - ssh
+  - access
+  - gateway
+  - oidc
+  - certificates
+kubeVersion: ">=1.26.0-0"

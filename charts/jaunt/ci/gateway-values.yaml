@@ -1,0 +1,117 @@
+publicUrl: https://jaunt.example.org
+sshSuffix: ssh.example.org
+agentEndpoint: agents.example.org:443
+gateEndpoint: gate.example.org:22
+
+image:
+  repository: registry.example.org/jaunt
+  tag: "0.1.0"
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000001
+
+oidc:
+  issuerUrl: https://sso.example.org
+  clientId: jaunt
+  clientSecret:
+    name: jaunt-oidc
+    key: client-secret
+  extraRootCertificates:
+    name: example-roots
+    key: roots.pem
+
+ca:
+  identitySecret:
+    name: jaunt-ca-identity
+    key: identity
+  init:
+    enabled: true
+
+sshGate:
+  enabled: true
+  proxyProtocol: true
+  trustedProxies:
+    - 10.42.0.0/16
+
+config:
+  cert_ttl_secs: 14400
+  client_ip_header: x-forwarded-for
+  oidc:
+    scopes:
+      - openid
+      - email
+      - groups
+    groups_claim: groups
+
+policy:
+  files:
+    ops.yaml: |
+      apiVersion: jaunt/v1
+      kind: Role
+      metadata:
+        name: ops
+      spec:
+        members:
+          users:
+            - alice@example.org
+        ssh:
+          nodes:
+            env:
+              - prod
+          logins:
+            - deploy
+
+persistence:
+  size: 2Gi
+  storageClass: example-fast
+  annotations:
+    example.org/owner: platform
+
+route:
+  gateway:
+    name: example-gateway
+    namespace: envoy-gateway-system
+  listenerSet:
+    enabled: true
+  tls:
+    secretName: ""
+    certificate:
+      enabled: true
+      issuer: example-issuer
+  http:
+    enabled: true
+    redirect:
+      enabled: true
+  agents:
+    enabled: true
+  ssh:
+    enabled: true
+
+networkPolicy:
+  enabled: true
+  ingress:
+    http:
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+  egress:
+    enabled: true
+    oidc:
+      to:
+        - ipBlock:
+            cidr: 203.0.113.0/24
+
+podAnnotations:
+  example.org/owner: platform
+podLabels:
+  example.org/tier: edge
+extraEnv:
+  - name: EXAMPLE_EXTRA
+    value: "1"
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - key: example.org/dedicated
+    operator: Exists
+    effect: NoSchedule
+log:
+  filter: "warn,jaunt::audit=info"

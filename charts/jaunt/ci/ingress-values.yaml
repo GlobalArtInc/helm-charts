@@ -1,0 +1,30 @@
+publicUrl: https://jaunt.example.org
+sshSuffix: ssh.example.org
+agentEndpoint: agents.example.org:443
+
+image:
+  repository: registry.example.org/jaunt
+
+oidc:
+  issuerUrl: https://sso.example.org
+  clientId: jaunt
+  clientSecret:
+    name: jaunt-oidc
+    key: client-secret
+
+ca:
+  identitySecret:
+    name: jaunt-ca-identity
+    key: identity
+
+agents:
+  enabled: false
+
+persistence:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    secretName: jaunt-tls

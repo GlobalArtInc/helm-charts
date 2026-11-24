@@ -1,0 +1,64 @@
+{{- if and .Values.route.listenerSet.enabled (or .Values.route.http.enabled .Values.route.agents.enabled .Values.route.ssh.enabled) }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: {{ include "jaunt.fullname" . }}-listeners
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+spec:
+  parentRef:
+    name: {{ .Values.route.gateway.name }}
+    namespace: {{ .Values.route.gateway.namespace }}
+  listeners:
+    {{- if .Values.route.http.enabled }}
+    - name: https
+      protocol: HTTPS
+      hostname: {{ include "jaunt.route.httpHost" . }}
+      port: {{ .Values.route.listenerSet.ports.https }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ include "jaunt.route.tlsSecretName" . }}
+            {{- with .Values.route.tls.secretNamespace }}
+            namespace: {{ . }}
+            {{- end }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- if .Values.route.http.redirect.enabled }}
+    - name: http
+      protocol: HTTP
+      hostname: {{ include "jaunt.route.httpHost" . }}
+      port: {{ .Values.route.listenerSet.ports.http }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+    {{- end }}
+    {{- if .Values.route.agents.enabled }}
+    - name: agents
+      protocol: TLS
+      hostname: {{ include "jaunt.route.agentsHost" . }}
+      port: {{ .Values.route.listenerSet.ports.agents }}
+      tls:
+        mode: Passthrough
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: TLSRoute
+    {{- end }}
+    {{- if .Values.route.ssh.enabled }}
+    - name: ssh
+      protocol: TCP
+      port: {{ .Values.route.listenerSet.ports.ssh }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+        kinds:
+          - group: gateway.networking.k8s.io
+            kind: TCPRoute
+    {{- end }}
+{{- end }}

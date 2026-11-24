@@ -1,0 +1,27 @@
+{{- if .Values.sshGate.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jaunt.fullname" . }}-ssh
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+  {{- with .Values.service.ssh.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.ssh.type }}
+  {{- if eq .Values.service.ssh.type "NodePort" }}
+  externalTrafficPolicy: {{ .Values.service.ssh.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: ssh
+      port: {{ .Values.service.ssh.port }}
+      targetPort: ssh
+      protocol: TCP
+      {{- if and (eq .Values.service.ssh.type "NodePort") .Values.service.ssh.nodePort }}
+      nodePort: {{ .Values.service.ssh.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "jaunt.selectorLabels" . | nindent 4 }}
+{{- end }}

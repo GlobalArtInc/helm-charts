@@ -1,0 +1,63 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jaunt.fullname" . }}
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "jaunt.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .Values.networkPolicy.egress.enabled }}
+    - Egress
+    {{- end }}
+  ingress:
+    - ports:
+        - port: {{ .Values.ports.http }}
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingress.http.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- if .Values.agents.enabled }}
+    - ports:
+        - port: {{ .Values.ports.agents }}
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingress.agents.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.sshGate.enabled }}
+    - ports:
+        - port: {{ .Values.ports.ssh }}
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingress.ssh.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- if .Values.networkPolicy.egress.enabled }}
+  egress:
+    {{- if .Values.networkPolicy.egress.dns.enabled }}
+    - to:
+        {{- toYaml .Values.networkPolicy.egress.dns.to | nindent 8 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    - to:
+        {{- toYaml .Values.networkPolicy.egress.oidc.to | nindent 8 }}
+      ports:
+        - port: {{ .Values.networkPolicy.egress.oidc.port }}
+          protocol: TCP
+    {{- with .Values.networkPolicy.egress.extra }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

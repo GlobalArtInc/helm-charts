@@ -1,0 +1,19 @@
+{{- if .Values.route.ssh.enabled }}
+apiVersion: {{ include "jaunt.route.apiVersion" (dict "ctx" . "kind" "TCPRoute" "explicit" .Values.route.ssh.apiVersion "fallback" "gateway.networking.k8s.io/v1alpha2") }}
+kind: TCPRoute
+metadata:
+  name: {{ include "jaunt.fullname" . }}-ssh
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- include "jaunt.parentRef" (dict "ctx" . "listener" "ssh" "sectionName" .Values.route.ssh.sectionName) | nindent 4 }}
+  rules:
+    - backendRefs:
+        - name: {{ include "jaunt.fullname" . }}-ssh
+          port: {{ .Values.service.ssh.port }}
+{{- end }}

@@ -1,0 +1,68 @@
+{{- if .Values.ca.init.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "jaunt.fullname" . }}-ca-init
+  labels:
+    {{- include "jaunt.caInit.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.ca.init.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.ca.init.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "jaunt.caInit.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "jaunt.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "jaunt.selectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: ca-init
+          image: {{ include "jaunt.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.image.command | nindent 12 }}
+          args:
+            - --config
+            - {{ include "jaunt.paths.config" . }}
+            - ca
+            - init
+          env:
+            - name: JAUNT_CA_KEY_FILE
+              value: {{ include "jaunt.paths.caIdentity" . | quote }}
+          {{- with .Values.ca.init.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- include "jaunt.volumeMounts.common" . | nindent 12 }}
+      volumes:
+        {{- include "jaunt.volumes.common" . | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

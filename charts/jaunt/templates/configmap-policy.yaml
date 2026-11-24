@@ -1,0 +1,15 @@
+{{- if not .Values.policy.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jaunt.policyConfigMapName" . }}
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+{{- with .Values.policy.files }}
+data:
+  {{- range $name, $text := . }}
+  {{ $name | quote }}: |
+    {{- $text | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

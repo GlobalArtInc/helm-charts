@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jaunt.fullname" . }}
+  labels:
+    {{- include "jaunt.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.ports.http.port }}
+      targetPort: http
+      protocol: TCP
+      appProtocol: http
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.ports.http.nodePort }}
+      nodePort: {{ .Values.service.ports.http.nodePort }}
+      {{- end }}
+    {{- if .Values.agents.enabled }}
+    - name: agents
+      port: {{ .Values.service.ports.agents.port }}
+      targetPort: agents
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.ports.agents.nodePort }}
+      nodePort: {{ .Values.service.ports.agents.nodePort }}
+      {{- end }}
+    {{- end }}
+  selector:
+    {{- include "jaunt.selectorLabels" . | nindent 4 }}

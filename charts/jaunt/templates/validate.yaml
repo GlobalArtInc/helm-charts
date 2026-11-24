@@ -1,0 +1,212 @@
+{{- $cfg := fromYaml (include "jaunt.config" .) -}}
+{{- $oidc := default dict $cfg.oidc -}}
+{{- $gate := default dict $cfg.ssh_gate -}}
+{{- if not .Values.image.repository -}}
+{{- fail "image.repository is not set. Pass the repository of the jaunt image without a tag, for example registry.example.org/jaunt. The chart has no default image." -}}
+{{- end -}}
+{{- if gt (int .Values.replicaCount) 1 -}}
+{{- fail (printf "replicaCount is %d. jauntd keeps its state in one SQLite file with a single writer, so only 0 or 1 replica is supported; there is no high availability yet." (int .Values.replicaCount)) -}}
+{{- end -}}
+{{- range $name := (list "data_dir" "listen" "agents_listen" "policy_dir") -}}
+{{- if hasKey $.Values.config $name -}}
+{{- fail (printf "config sets %s, which the chart owns: the volumes, the probes and the Services depend on it. Use dataDir, ports and agents.enabled instead, and remove it from config." $name) -}}
+{{- end -}}
+{{- end -}}
+{{- range $name, $_ := (default dict .Values.config.ssh_gate) -}}
+{{- if not (has $name (list "max_unauthenticated" "write_stall_secs")) -}}
+{{- fail (printf "config sets ssh_gate.%s, which the chart owns: set it through sshGate, gateEndpoint and ports. Only ssh_gate.max_unauthenticated and ssh_gate.write_stall_secs belong in config." $name) -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.config.ssh_gate (not .Values.sshGate.enabled) -}}
+{{- fail "config sets ssh_gate and sshGate.enabled is off. Turn sshGate.enabled on, which generates the section the config keys are merged into." -}}
+{{- end -}}
+{{- range $name, $_ := (default dict .Values.config.oidc) -}}
+{{- if or (hasPrefix "client_secret" $name) (eq $name "extra_root_certificates_file") -}}
+{{- fail (printf "config sets oidc.%s, which the chart owns: use oidc.clientSecret and oidc.extraRootCertificates. A secret never belongs in config." $name) -}}
+{{- end -}}
+{{- end -}}
+{{- $secretKey := regexFind "(?i)\"[^\"\\\\]*secret[^\"\\\\]*\":" (toJson .Values.config) -}}
+{{- if $secretKey -}}
+{{- fail (printf "config has the key %s, and a key with \"secret\" in its name does not belong in config: it is a plain ConfigMap, not a Secret. Remove it." (trimSuffix ":" $secretKey)) -}}
+{{- end -}}
+{{- if not $cfg.public_url -}}
+{{- fail "publicUrl is not set. It is the public https base URL of the control and web port, for example https://jaunt.example.org, with no path. The OIDC redirect URI is <publicUrl>/v1/login/callback." -}}
+{{- end -}}
+{{- if not (regexMatch "^https://[^/?#@ ]+$" $cfg.public_url) -}}
+{{- fail (printf "public_url is %q. The daemon needs an https URL with a host and nothing else: no path, no trailing slash, no query and no credentials, for example https://jaunt.example.org." $cfg.public_url) -}}
+{{- end -}}
+{{- if regexMatch "[A-Z]" (include "jaunt.publicHost" .) -}}
+{{- fail (printf "public_url is %q. The host has upper-case letters, and Gateway API hostnames have to be lower case. Write the host in lower case." $cfg.public_url) -}}
+{{- end -}}
+{{- if and .Values.route.http.host (ne .Values.route.http.host (include "jaunt.publicHost" .)) -}}
+{{- fail (printf "route.http.host is %q and the host of publicUrl is %q. They have to be the same, or the login callback would not come back to the route: leave route.http.host empty to use the host of publicUrl." .Values.route.http.host (include "jaunt.publicHost" .)) -}}
+{{- end -}}
+{{- if and .Values.ingress.host (ne .Values.ingress.host (include "jaunt.publicHost" .)) -}}
+{{- fail (printf "ingress.host is %q and the host of publicUrl is %q. They have to be the same: leave ingress.host empty to use the host of publicUrl." .Values.ingress.host (include "jaunt.publicHost" .)) -}}
+{{- end -}}
+{{- if not $cfg.ssh_suffix -}}
+{{- fail "sshSuffix is not set. It is the DNS suffix of the node names users type, for example ssh.example.org, a lowercase DNS name. The daemon refuses to run without it." -}}
+{{- end -}}
+{{- if not (and (include "jaunt.isDnsName" $cfg.ssh_suffix) (le (len $cfg.ssh_suffix) 189)) -}}
+{{- fail (printf "ssh_suffix is %q (sshSuffix). The daemon needs a lowercase DNS name of at most 189 characters: letters a-z, digits and hyphens in labels separated by dots, no spaces, no wildcard such as *.example.org and no leading dot." $cfg.ssh_suffix) -}}
+{{- end -}}
+{{- if not $cfg.agent_endpoint -}}
+{{- fail "agentEndpoint is not set. It is host:port that node agents dial, a lowercase DNS name and a port, for example agents.example.org:443. The daemon refuses to run without it." -}}
+{{- end -}}
+{{- $agentHost := include "jaunt.hostOf" $cfg.agent_endpoint -}}
+{{- $agentPort := regexFind "[0-9]+$" $cfg.agent_endpoint -}}
+{{- if not (and (regexMatch "^[^:]+:[0-9]{1,5}$" $cfg.agent_endpoint) (include "jaunt.isDnsName" $agentHost) (not (include "jaunt.endsInNumber" $agentHost)) (ge (int $agentPort) 1) (le (int $agentPort) 65535)) -}}
+{{- fail (printf "agent_endpoint is %q (agentEndpoint). It has to be a lowercase DNS name, not an IP address and not a name ending in a number, then a colon and a port from 1 to 65535, for example agents.example.org:443." $cfg.agent_endpoint) -}}
+{{- end -}}
+{{- if and .Values.route.agents.host (ne .Values.route.agents.host $agentHost) -}}
+{{- fail (printf "route.agents.host is %q and the host of agentEndpoint is %q. They have to be the same, because the agents check the server certificate against the host of agentEndpoint: leave route.agents.host empty." .Values.route.agents.host $agentHost) -}}
+{{- end -}}
+{{- if $cfg.gate_endpoint -}}
+{{- $gateText := lower $cfg.gate_endpoint -}}
+{{- if hasPrefix "[" $gateText -}}
+{{- if .Values.sshGate.enabled -}}
+{{- fail (printf "gate_endpoint is %q (gateEndpoint), an IPv6 address. With the SSH gate on, the daemon needs a DNS name there, because clients verify the gate's host certificate against it." $cfg.gate_endpoint) -}}
+{{- end -}}
+{{- else -}}
+{{- $gateHost := include "jaunt.hostOf" $gateText -}}
+{{- $gatePort := regexFind ":[0-9]+$" $gateText -}}
+{{- if or (not (include "jaunt.isDnsName" $gateHost)) (and (contains ":" $gateText) (not (regexMatch "^[^:]+:[0-9]{1,5}$" $gateText))) (and $gatePort (or (lt (int (trimPrefix ":" $gatePort)) 1) (gt (int (trimPrefix ":" $gatePort)) 65535))) -}}
+{{- fail (printf "gate_endpoint is %q (gateEndpoint). It has to be a DNS name or an IPv4 address, optionally followed by a colon and a port from 1 to 65535, for example gate.example.org:22." $cfg.gate_endpoint) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if or (not .Values.oidc.issuerUrl) (not $oidc.issuer_url) -}}
+{{- fail "oidc.issuerUrl is not set. Give the issuer URL of the OIDC provider, for example https://sso.example.org. The daemon needs OIDC to run." -}}
+{{- end -}}
+{{- if not $oidc.client_id -}}
+{{- fail "oidc.clientId is not set. Give the client ID registered with the OIDC provider for Jaunt." -}}
+{{- end -}}
+{{- if or (not .Values.oidc.clientSecret.name) (not .Values.oidc.clientSecret.key) -}}
+{{- fail "oidc.clientSecret.name and oidc.clientSecret.key have to name the existing Secret and the key that hold the OIDC client secret. The chart takes no plain-text client secret and creates no Secret: create it first, for example with kubectl create secret generic, and point these two values at it. The daemon refuses to run without OIDC." -}}
+{{- end -}}
+{{- if or (not .Values.ca.identitySecret.name) (not .Values.ca.identitySecret.key) -}}
+{{- fail "ca.identitySecret.name and ca.identitySecret.key have to name the existing Secret and the key that hold the age identity of the certificate authorities. The chart never creates it and never takes it as a value: see the README, section First run, for how to create it without printing it." -}}
+{{- end -}}
+{{- if or (and .Values.oidc.extraRootCertificates.name (not .Values.oidc.extraRootCertificates.key)) (and (not .Values.oidc.extraRootCertificates.name) .Values.oidc.extraRootCertificates.key) -}}
+{{- fail "oidc.extraRootCertificates.name and oidc.extraRootCertificates.key go together: name the ConfigMap and the key that hold the PEM file, or leave both empty." -}}
+{{- end -}}
+{{- range .Values.extraEnv -}}
+{{- if has .name (list "JAUNT_CA_KEY" "JAUNT_CA_KEY_FILE" "JAUNT_OIDC_CLIENT_SECRET" "JAUNT_CONFIG") -}}
+{{- fail (printf "extraEnv sets %s. The chart wires the certificate authority identity, the OIDC client secret and the config path itself, from ca.identitySecret, oidc.clientSecret and the generated ConfigMap, and the daemon refuses two sources for the same secret. Remove it from extraEnv." .name) -}}
+{{- end -}}
+{{- end -}}
+{{- if lt (int .Values.terminationGracePeriodSeconds) 15 -}}
+{{- fail (printf "terminationGracePeriodSeconds is %d. The daemon takes up to 10 seconds to shut down, so set it to at least 15, or the kubelet kills it mid-shutdown." (int .Values.terminationGracePeriodSeconds)) -}}
+{{- end -}}
+{{- if or (eq (int .Values.ports.http) (int .Values.ports.agents)) (eq (int .Values.ports.http) (int .Values.ports.ssh)) (eq (int .Values.ports.agents) (int .Values.ports.ssh)) -}}
+{{- fail (printf "ports.http (%d), ports.agents (%d) and ports.ssh (%d) have to be three different numbers: the daemon cannot listen on one port twice." (int .Values.ports.http) (int .Values.ports.agents) (int .Values.ports.ssh)) -}}
+{{- end -}}
+{{- if and .Values.policy.existingConfigMap .Values.policy.files -}}
+{{- fail "policy.existingConfigMap and policy.files are both set. Use one: the chart's own ConfigMap from policy.files, or an existing ConfigMap by name." -}}
+{{- end -}}
+{{- range $name, $_ := .Values.policy.files -}}
+{{- if not (and (not (hasPrefix "." $name)) (or (hasSuffix ".yaml" $name) (hasSuffix ".yml" $name))) -}}
+{{- fail (printf "policy.files has the key %q. The daemon only reads files whose name ends in .yaml or .yml and does not start with a dot, and skips the rest without a word, so rename it." $name) -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.ca.init.enabled (not .Values.persistence.enabled) -}}
+{{- fail "ca.init.enabled is on and persistence.enabled is off. The Job would write the certificate authority to a volume that only it can see. Enable persistence, or set ca.init.enabled to false." -}}
+{{- end -}}
+{{- if and .Values.ca.init.enabled (eq (int .Values.replicaCount) 0) -}}
+{{- fail "ca.init.enabled is on and replicaCount is 0. The Job is scheduled next to the daemon pod, which owns the volume, so it needs that pod to exist." -}}
+{{- end -}}
+{{- if and .Values.ca.init.enabled (not (has "ReadWriteOnce" .Values.persistence.accessModes)) (not (has "ReadWriteMany" .Values.persistence.accessModes)) -}}
+{{- fail "ca.init.enabled is on and persistence.accessModes has neither ReadWriteOnce nor ReadWriteMany. The Job and the daemon pod have to mount the volume together, which ReadWriteOncePod forbids." -}}
+{{- end -}}
+{{- range $i, $block := .Values.sshGate.trustedProxies -}}
+{{- $problem := include "jaunt.trustedProxyProblem" $block -}}
+{{- if $problem -}}
+{{- fail (printf "sshGate.trustedProxies[%d] is %q, and %s. The daemon refuses it at start." $i $block $problem) -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.sshGate.enabled -}}
+{{- if not .Values.agents.enabled -}}
+{{- fail "sshGate.enabled is on and agents.enabled is off. The SSH gate reaches nodes through the agents' listener, so it needs it." -}}
+{{- end -}}
+{{- if not $cfg.gate_endpoint -}}
+{{- fail "sshGate.enabled is on and gateEndpoint is not set. Clients learn the gate address from it, for example gate.example.org:22." -}}
+{{- end -}}
+{{- $hostnames := default (list) $gate.hostnames -}}
+{{- if not $hostnames -}}
+{{- fail "sshGate.hostnames is empty and gateEndpoint gives no host to default it from. List at least one name clients may use for the gate." -}}
+{{- end -}}
+{{- if gt (len $hostnames) 64 -}}
+{{- fail (printf "sshGate.hostnames has %d names. The daemon takes at most 64." (len $hostnames)) -}}
+{{- end -}}
+{{- $seen := list -}}
+{{- range $i, $name := $hostnames -}}
+{{- $normal := trimSuffix "." (lower $name) -}}
+{{- if not (include "jaunt.isDnsName" $normal) -}}
+{{- fail (printf "sshGate.hostnames[%d] is %q, which is not a DNS name: letters, digits and hyphens in labels separated by dots." $i $name) -}}
+{{- end -}}
+{{- if has $normal $seen -}}
+{{- fail (printf "sshGate.hostnames[%d] is %q, which repeats an earlier name in sshGate.hostnames." $i $name) -}}
+{{- end -}}
+{{- $seen = append $seen $normal -}}
+{{- end -}}
+{{- if not (has (include "jaunt.hostOf" (lower $cfg.gate_endpoint)) $seen) -}}
+{{- fail (printf "the host of gateEndpoint (%s) is not in sshGate.hostnames. Clients verify the gate's host certificate against the name they dial, so list it there, or leave sshGate.hostnames empty to use it." (include "jaunt.hostOf" (lower $cfg.gate_endpoint))) -}}
+{{- end -}}
+{{- if and .Values.sshGate.proxyProtocol (not .Values.sshGate.trustedProxies) -}}
+{{- fail "sshGate.proxyProtocol is on and sshGate.trustedProxies is empty. The gate then accepts a PROXY header from nobody. List the CIDR blocks of the proxies that send it." -}}
+{{- end -}}
+{{- if and .Values.sshGate.trustedProxies (not .Values.sshGate.proxyProtocol) -}}
+{{- fail "sshGate.trustedProxies is set and sshGate.proxyProtocol is off. The daemon refuses that combination: turn proxyProtocol on or empty the list." -}}
+{{- end -}}
+{{- end -}}
+{{- range $port := (list "http" "agents") -}}
+{{- $nodePort := (index $.Values.service.ports $port).nodePort -}}
+{{- if and $nodePort (ne $.Values.service.type "NodePort") -}}
+{{- fail (printf "service.ports.%s.nodePort is %d and service.type is %s. A node port only applies to type NodePort." $port (int $nodePort) $.Values.service.type) -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.service.ssh.nodePort (ne .Values.service.ssh.type "NodePort") -}}
+{{- fail (printf "service.ssh.nodePort is %d and service.ssh.type is %s. A node port only applies to type NodePort." (int .Values.service.ssh.nodePort) .Values.service.ssh.type) -}}
+{{- end -}}
+{{- if and .Values.sshGate.enabled .Values.route.ssh.enabled (eq .Values.service.ssh.type "NodePort") -}}
+{{- fail "route.ssh.enabled is on and service.ssh.type is NodePort. A TCPRoute and a node port are two ways to reach the SSH gate: use one." -}}
+{{- end -}}
+{{- if and .Values.route.agents.enabled (not .Values.agents.enabled) -}}
+{{- fail "route.agents.enabled is on and agents.enabled is off. There is no agents' listener to route to." -}}
+{{- end -}}
+{{- if and .Values.route.ssh.enabled (not .Values.sshGate.enabled) -}}
+{{- fail "route.ssh.enabled is on and sshGate.enabled is off. There is no SSH gate to route to." -}}
+{{- end -}}
+{{- if and .Values.route.http.redirect.enabled (not .Values.route.http.enabled) -}}
+{{- fail "route.http.redirect.enabled is on and route.http.enabled is off. The redirect belongs to the http route." -}}
+{{- end -}}
+{{- if or .Values.route.http.enabled .Values.route.agents.enabled .Values.route.ssh.enabled -}}
+{{- if not .Values.route.gateway.name -}}
+{{- fail "A route is enabled and route.gateway.name is not set. Name the Gateway, in route.gateway.namespace, that the routes or the ListenerSet attach to." -}}
+{{- end -}}
+{{- if not .Values.route.listenerSet.enabled -}}
+{{- if and .Values.route.http.enabled (not .Values.route.http.sectionName) -}}
+{{- fail "route.http.enabled is on and route.listenerSet.enabled is off, so route.http.sectionName has to name the Gateway listener that terminates TLS for the host." -}}
+{{- end -}}
+{{- if and .Values.route.agents.enabled (not .Values.route.agents.sectionName) -}}
+{{- fail "route.agents.enabled is on and route.listenerSet.enabled is off, so route.agents.sectionName has to name the Gateway TLS listener in passthrough mode for the host. Without it the TLSRoute would attach to every TLS listener of the Gateway." -}}
+{{- end -}}
+{{- if and .Values.route.ssh.enabled (not .Values.route.ssh.sectionName) -}}
+{{- fail "route.ssh.enabled is on and route.listenerSet.enabled is off, so route.ssh.sectionName has to name the Gateway TCP listener for the SSH gate. Without it the TCPRoute would attach to every TCP listener of a shared Gateway." -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.route.listenerSet.enabled .Values.route.http.enabled -}}
+{{- if and (not .Values.route.tls.certificate.enabled) (not .Values.route.tls.secretName) -}}
+{{- fail "route.tls.secretName is not set, and route.tls.certificate.enabled is off, so the https listener of the ListenerSet has no certificate. Name the existing TLS Secret for the host, or enable route.tls.certificate, or set route.listenerSet.enabled to false to attach to a gateway listener that already terminates TLS." -}}
+{{- end -}}
+{{- if and .Values.route.tls.certificate.enabled (not .Values.route.tls.certificate.issuer) -}}
+{{- fail "route.tls.certificate.enabled is on and route.tls.certificate.issuer is not set. Name the ClusterIssuer that signs the certificate." -}}
+{{- end -}}
+{{- if and .Values.route.tls.certificate.enabled .Values.route.tls.secretNamespace -}}
+{{- fail "route.tls.certificate.enabled is on and route.tls.secretNamespace is set. The Certificate and its Secret are created in the release namespace, so there is no other namespace to refer to: leave secretNamespace empty." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.egress.enabled (not .Values.networkPolicy.egress.oidc.to) -}}
+{{- fail "networkPolicy.egress.enabled is on and networkPolicy.egress.oidc.to is empty. The egress policy then has no rule for the OIDC issuer, and the daemon cannot start. Give the issuer's destination, for example an ipBlock or a podSelector." -}}
+{{- end -}}

@@ -1,0 +1,360 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# jauntd keeps its state in one SQLite file, which has a single writer, so one
+# replica is the only supported setting. 0 stops the daemon without removing
+# anything. Values above 1 fail the render: there is no high availability yet.
+replicaCount: 1
+
+image:
+  # Required: the repository of the jaunt image, without a tag. The chart has no
+  # default image.
+  repository: ""
+  # Empty means the chart's appVersion. The tag has to exist in the registry.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+  # The binary the container runs. The chart appends the arguments, for example
+  # `--config <path> run`, so this is a program name or a path, not a shell line.
+  command:
+    - jauntd
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# jauntd never calls the Kubernetes API.
+automountServiceAccountToken: false
+
+# --- What jauntd is told ---------------------------------------------------
+
+# Public base URL of the control and web port, as the browser and the CLI reach
+# it: https, no path, no trailing slash. Required. The OIDC redirect URI is
+# <publicUrl>/v1/login/callback.
+publicUrl: ""
+
+# Suffix of the node names users type, for example "ssh.example.org" gives
+# <node>.ssh.example.org. A lowercase DNS name. Required.
+sshSuffix: ""
+
+# host:port the node agents dial, a lowercase DNS name (no IP address) and a
+# port. Its host is the server name of the agents' TLS certificate, and the
+# default host of route.agents. Required.
+agentEndpoint: ""
+
+# host[:port] clients learn as the SSH gate address. Required with sshGate.
+gateEndpoint: ""
+
+# The data directory, on the volume below. The chart owns it: `config` may not
+# set data_dir.
+dataDir: /var/lib/jaunt
+
+# Container ports, which have to differ. The chart writes them into `listen`,
+# `agents_listen` and `ssh_gate.listen`, and the Services and the routes refer
+# to them by name. The SSH gate port stays above 1024: the container is not root.
+ports:
+  http: 8443
+  agents: 8444
+  ssh: 2222
+
+# The agents' listener: TLS with mutual authentication, terminated by jauntd.
+agents:
+  enabled: true
+
+# The SSH gate. Off by default: it needs gateEndpoint and the agents' listener.
+sshGate:
+  enabled: false
+  # Names clients may use for the gate. Empty means the host of gateEndpoint.
+  hostnames: []
+  # Read a PROXY protocol v2 header on every connection. Then trustedProxies is
+  # required, and the connection has to come through such a proxy.
+  proxyProtocol: false
+  # CIDR blocks of the proxies allowed to send the header. Required with
+  # proxyProtocol, refused without it, and never wider than the daemon allows.
+  trustedProxies: []
+
+oidc:
+  issuerUrl: ""
+  clientId: ""
+  # The client secret is read from a file mounted from an existing Secret. The
+  # chart never takes it as a value and never makes a Secret.
+  clientSecret:
+    name: ""
+    key: ""
+  # Optional PEM file with extra root certificates for the issuer, from an
+  # existing ConfigMap (certificates are public). Leave empty for none.
+  extraRootCertificates:
+    name: ""
+    key: ""
+
+ca:
+  # The age identity that decrypts the certificate authority keys in
+  # <dataDir>/ca, from an existing Secret. Created before the first install,
+  # see the README. Anyone holding both this and the data directory can issue
+  # certificates.
+  identitySecret:
+    name: ""
+    key: ""
+  # A Job that runs `jauntd ca init` once against the volume. See the README
+  # for what it does and why to turn it off again afterwards.
+  init:
+    enabled: false
+    activeDeadlineSeconds: 300
+    ttlSecondsAfterFinished: 3600
+    resources: {}
+
+# Free-form jauntd.yaml, merged over the keys the chart generates from the
+# values above. Use it for every other key, for example cert_ttl_secs,
+# device_login, web, client_ip_header, policy_poll_secs, oidc.scopes, and
+# sections added in later releases. The chart refuses a config that sets a key it
+# owns: data_dir, listen, agents_listen, policy_dir, ssh_gate (except
+# max_unauthenticated and write_stall_secs), oidc.client_secret*,
+# oidc.extra_root_certificates_file, and any key with "secret" in its name. The
+# daemon rejects unknown keys at start, so a typo fails the pod, not the render.
+# Do not put a secret here: the file is a plain ConfigMap.
+config: {}
+
+# The access policy, as files in a ConfigMap mounted at the policy directory.
+# jauntd reloads it on its own, without a restart.
+policy:
+  # An existing ConfigMap to mount instead of the chart's. Then `files` has to
+  # be empty. Keys must end in .yaml or .yml.
+  existingConfigMap: ""
+  # File name -> YAML text. Empty means an empty policy, which denies everything.
+  files: {}
+
+log:
+  # RUST_LOG filter, for example "info" or "warn,jaunt::audit=info". Empty
+  # keeps the daemon's default (info). The audit events are JSON lines on stderr.
+  filter: ""
+
+# 10 seconds are the daemon's own shutdown grace. The chart refuses a value
+# below 15.
+terminationGracePeriodSeconds: 30
+
+# /healthz on the http port answers "ok" as soon as the daemon serves. The
+# daemon opens the database and asks the OIDC issuer for its configuration once,
+# before it binds, with no retry: an unreachable issuer makes it exit with code 1,
+# and the kubelet restarts it with a back-off. The startup probe is long only for
+# a slow volume or a large database.
+probes:
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# extraEnv may not set JAUNT_CA_KEY, JAUNT_CA_KEY_FILE, JAUNT_OIDC_CLIENT_SECRET
+# or JAUNT_CONFIG. The chart cannot look inside extraEnvFrom: do not let a
+# Secret or ConfigMap there carry JAUNT_CA_KEY or JAUNT_OIDC_CLIENT_SECRET, or
+# the daemon refuses to start for having two sources.
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  # Without a volume the data directory is an emptyDir, and the certificate
+  # authority and the database vanish with the pod. Only for a throw-away trial.
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+  # Adds helm.sh/resource-policy: keep, so `helm uninstall` leaves the claim,
+  # and with it the certificate authority, in place.
+  retain: true
+
+# The Service for the http and agents ports. The SSH gate has its own Service,
+# below, so that it can be reached some other way.
+service:
+  type: ClusterIP
+  annotations: {}
+  # port is the Service port; the target is the container port in `ports`.
+  # nodePort only applies to type NodePort; null lets Kubernetes pick one.
+  ports:
+    http:
+      port: 8443
+      nodePort: null
+    agents:
+      port: 8444
+      nodePort: null
+  # The SSH gate's Service, <fullname>-ssh, rendered with sshGate.enabled.
+  ssh:
+    # ClusterIP for a TCPRoute; NodePort for an external layer-4 proxy that
+    # reaches the gate on a node port, for example haproxy sending PROXY v2.
+    type: ClusterIP
+    port: 2222
+    # A fixed node port for type NodePort; null lets Kubernetes pick one.
+    nodePort: null
+    # Only for type NodePort. Local keeps the proxy's own address as the source,
+    # which sshGate.trustedProxies matches; Cluster hides it behind the node's
+    # address. With Local, only the node that runs the pod answers.
+    externalTrafficPolicy: Local
+    annotations: {}
+
+# Gateway API exposure. Each of the three ports is optional and independent. The
+# SSH gate can instead be reached through service.ssh (NodePort).
+route:
+  # The gateway the routes attach to. Needed unless every route names its own
+  # sectionName on an existing Gateway listener and listenerSet is off.
+  gateway:
+    name: ""
+    namespace: envoy-gateway-system
+
+  # Let the chart create a ListenerSet on the gateway, with one listener per
+  # enabled route. Turn it off to attach the routes to listeners that already
+  # exist on the Gateway, by sectionName.
+  listenerSet:
+    enabled: true
+    ports:
+      https: 443
+      http: 80
+      agents: 443
+      ssh: 22
+
+  # The certificate of the https listener (route.http). The chart makes no
+  # ReferenceGrant: a Secret in the release namespace needs none, and a grant for
+  # a Secret in another namespace belongs to the namespace that owns it (the
+  # README has the manifest). The Gateway must also allow the ListenerSet
+  # (allowedListeners).
+  tls:
+    secretName: ""
+    # Namespace of an existing Secret when it is not the release's. Not with
+    # certificate.enabled, which creates the Secret in the release namespace.
+    secretNamespace: ""
+    certificate:
+      enabled: false
+      issuer: ""
+
+  annotations: {}
+
+  # Control and web port: HTTPRoute on a listener that terminates TLS.
+  http:
+    enabled: false
+    # Empty means the host of publicUrl. If set, it has to be that host.
+    host: ""
+    # Listener of an existing Gateway. Required without listenerSet.
+    sectionName: ""
+    timeouts:
+      request: ""
+    # A second HTTPRoute that answers on the http listener with a redirect to
+    # https. With listenerSet it uses the chart's own `http` listener; without,
+    # the Gateway listener named by sectionName.
+    redirect:
+      enabled: false
+      sectionName: http
+      statusCode: 301
+      # The https port in the Location header; empty leaves it to the scheme.
+      port: null
+
+  # Agents' port: TLSRoute with TLS passthrough. jauntd does its own mutual TLS,
+  # so the gateway must not terminate it and only reads the SNI.
+  agents:
+    enabled: false
+    # Empty picks what the cluster serves: gateway.networking.k8s.io/v1 for a
+    # TLSRoute, else v1alpha2, and v1 when the render cannot tell (helm template).
+    apiVersion: ""
+    # Empty means the host of agentEndpoint. If set, it has to be that host: the
+    # agents verify the certificate against it.
+    host: ""
+    # Listener of an existing Gateway. Required without listenerSet.
+    sectionName: ""
+
+  # SSH gate: TCPRoute on a TCP listener. TCP has no hostname.
+  ssh:
+    enabled: false
+    # Empty picks what the cluster serves: gateway.networking.k8s.io/v1 for a
+    # TCPRoute when served, else v1alpha2, and v1alpha2 when the render cannot
+    # tell (helm template).
+    apiVersion: ""
+    # Listener of an existing Gateway. Required without listenerSet, so that the
+    # route does not attach to every TCP listener of a shared Gateway.
+    sectionName: ""
+
+# The same publishing for the http port, as one Ingress, for a cluster without
+# the Gateway API. The agents and the SSH gate cannot go through an Ingress.
+ingress:
+  enabled: false
+  className: ""
+  # Empty means the host of publicUrl. If set, it has to be that host.
+  host: ""
+  annotations: {}
+  tls:
+    secretName: ""
+
+networkPolicy:
+  enabled: false
+  # An empty list admits every source to that port. For the SSH gate behind an
+  # external proxy, list the proxy's address, for example
+  #   from: [{ipBlock: {cidr: 192.0.2.10/32}}]
+  # which holds only while service.ssh.externalTrafficPolicy is Local.
+  ingress:
+    http:
+      from: []
+    agents:
+      from: []
+    ssh:
+      from: []
+  egress:
+    # Restrict egress too. Then egress.oidc.to is required.
+    enabled: false
+    dns:
+      enabled: true
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    # Where the OIDC issuer lives, as NetworkPolicy peers.
+    oidc:
+      to: []
+      port: 443
+    extra: []

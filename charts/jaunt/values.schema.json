@@ -1,0 +1,737 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "jaunt",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "secretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the existing object."
+        },
+        "key": {
+          "type": "string",
+          "description": "Key inside it."
+        }
+      },
+      "description": "A key in an existing Secret or ConfigMap in the release namespace. The chart renders only this reference, never the value."
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "objectList": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "freeObject": {
+      "type": "object"
+    },
+    "gatewayDuration": {
+      "type": "string",
+      "pattern": "^$|^([0-9]{1,5}(h|m|s|ms)){1,4}$",
+      "description": "Gateway API duration such as 60s or 1m30s, as the HTTPRoute timeouts field takes it, or empty for none."
+    },
+    "peers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0 or 1. jauntd keeps its state in one SQLite file with a single writer: there is no high availability yet."
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[0-9a-f]{64}$"
+        },
+        "pullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "$ref": "#/definitions/objectList"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        }
+      }
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
+    "publicUrl": {
+      "type": "string"
+    },
+    "sshSuffix": {
+      "type": "string"
+    },
+    "agentEndpoint": {
+      "type": "string"
+    },
+    "gateEndpoint": {
+      "type": "string"
+    },
+    "dataDir": {
+      "type": "string",
+      "pattern": "^/.+"
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "http": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "agents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "ssh": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "sshGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "hostnames": {
+          "$ref": "#/definitions/stringList"
+        },
+        "proxyProtocol": {
+          "type": "boolean"
+        },
+        "trustedProxies": {
+          "$ref": "#/definitions/stringList"
+        }
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "issuerUrl": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "clientSecret": {
+          "$ref": "#/definitions/secretRef"
+        },
+        "extraRootCertificates": {
+          "$ref": "#/definitions/secretRef"
+        }
+      }
+    },
+    "ca": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "identitySecret": {
+          "$ref": "#/definitions/secretRef"
+        },
+        "init": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "activeDeadlineSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ttlSecondsAfterFinished": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resources": {
+              "$ref": "#/definitions/freeObject"
+            }
+          }
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Free-form jauntd.yaml, merged over the keys the chart generates. Unknown keys are the daemon's to reject, not the schema's."
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "existingConfigMap": {
+          "type": "string"
+        },
+        "files": {
+          "$ref": "#/definitions/stringMap"
+        }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "type": "string"
+        }
+      }
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 15
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "liveness": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "podSecurityContext": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "securityContext": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "extraEnv": {
+      "$ref": "#/definitions/objectList"
+    },
+    "extraEnvFrom": {
+      "$ref": "#/definitions/objectList"
+    },
+    "extraVolumes": {
+      "$ref": "#/definitions/objectList"
+    },
+    "extraVolumeMounts": {
+      "$ref": "#/definitions/objectList"
+    },
+    "nodeSelector": {
+      "$ref": "#/definitions/stringMap"
+    },
+    "tolerations": {
+      "$ref": "#/definitions/objectList"
+    },
+    "affinity": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string"
+        },
+        "accessModes": {
+          "$ref": "#/definitions/stringList"
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "retain": {
+          "type": "boolean"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "ClusterIP",
+            "NodePort"
+          ]
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "ports": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "http": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "nodePort": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 30000,
+                  "maximum": 32767
+                }
+              }
+            },
+            "agents": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "nodePort": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 30000,
+                  "maximum": 32767
+                }
+              }
+            }
+          }
+        },
+        "ssh": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "ClusterIP",
+                "NodePort"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "nodePort": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 30000,
+              "maximum": 32767
+            },
+            "externalTrafficPolicy": {
+              "enum": [
+                "Local",
+                "Cluster"
+              ]
+            },
+            "annotations": {
+              "$ref": "#/definitions/stringMap"
+            }
+          }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            }
+          }
+        },
+        "listenerSet": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "ports": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "https": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "http": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "agents": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "ssh": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string"
+            },
+            "secretNamespace": {
+              "type": "string"
+            },
+            "certificate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "issuer": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "http": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string"
+            },
+            "sectionName": {
+              "type": "string"
+            },
+            "timeouts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "request": {
+                  "$ref": "#/definitions/gatewayDuration"
+                }
+              }
+            },
+            "redirect": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "sectionName": {
+                  "type": "string"
+                },
+                "statusCode": {
+                  "enum": [
+                    301,
+                    302
+                  ]
+                },
+                "port": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "apiVersion": {
+              "type": "string",
+              "pattern": "^$|^gateway\\.networking\\.k8s\\.io/v1(alpha2)?$"
+            },
+            "host": {
+              "type": "string"
+            },
+            "sectionName": {
+              "type": "string"
+            }
+          }
+        },
+        "ssh": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "apiVersion": {
+              "type": "string",
+              "pattern": "^$|^gateway\\.networking\\.k8s\\.io/v1(alpha2)?$"
+            },
+            "sectionName": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap"
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secretName": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "http": {
+              "$ref": "#/definitions/peers"
+            },
+            "agents": {
+              "$ref": "#/definitions/peers"
+            },
+            "ssh": {
+              "$ref": "#/definitions/peers"
+            }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "to": {
+                  "$ref": "#/definitions/objectList"
+                }
+              }
+            },
+            "oidc": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "to": {
+                  "$ref": "#/definitions/objectList"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            },
+            "extra": {
+              "$ref": "#/definitions/objectList"
+            }
+          }
+        }
+      }
+    }
+  }
+}
