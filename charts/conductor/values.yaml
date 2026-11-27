@@ -13,6 +13,8 @@ imagePullSecrets: []
 javaOpts: ""
 extraEnv: []
 
+extraObjects: []
+
 postgres:
   host: ""
   port: 5432

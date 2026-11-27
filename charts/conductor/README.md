@@ -234,8 +234,40 @@ oauth2Proxy:
 | `resources` | 1 CPU / 1500Mi requests, 2 CPU / 2500Mi limits | |
 | `pdb.enabled`, `pdb.minAvailable` | `false`, `1` | |
 | `podSecurityContext`, `securityContext` | `{}` | see below |
+| `extraObjects` | `[]` | extra manifests, strings or objects, passed through `tpl` |
 
 `values.schema.json` rejects keys the chart does not have, so a typo is refused by helm and named.
+
+## Extra objects
+
+`extraObjects` is a list of manifests added to the release. Each item is either a string or an object, and both go through `tpl`, so `{{ .Release.Namespace }}`, `{{ .Release.Name }}` and `{{ .Values.* }}` work in them. A string is a manifest as it would be written in a file; an object is the same manifest as YAML.
+
+For example, an ExternalSecret that makes the Secret `oauth2Proxy.existingSecret` points at, from the keys `client-secret` and `cookie-secret` at one path of the store (with the External Secrets Operator and a SecretStore `openbao` in the namespace):
+
+```yaml
+oauth2Proxy:
+  enabled: true
+  existingSecret: conductor-oauth2-proxy
+extraObjects:
+  - |
+    apiVersion: external-secrets.io/v1
+    kind: ExternalSecret
+    metadata:
+      name: conductor-oauth2-proxy
+      namespace: {{ .Release.Namespace }}
+    spec:
+      refreshInterval: 1h
+      secretStoreRef:
+        name: openbao
+        kind: SecretStore
+      target:
+        name: {{ .Values.oauth2Proxy.existingSecret }}
+      dataFrom:
+        - extract:
+            key: conductor/oauth2-proxy
+```
+
+The Deployment does not roll when such a Secret changes; restart the pods to pick up a new value.
 
 ## Things worth knowing
 

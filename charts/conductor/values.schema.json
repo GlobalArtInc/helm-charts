@@ -640,6 +640,15 @@
         }
       },
       "additionalProperties": false
+    },
+    "extraObjects": {
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "object"
+        ]
+      }
     }
   },
   "additionalProperties": false
