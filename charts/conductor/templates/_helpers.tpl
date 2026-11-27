@@ -95,6 +95,50 @@ true
 {{- default .Values.route.host .Values.ingress.host -}}
 {{- end -}}
 
+{{- define "conductor.oauth2Proxy.serviceName" -}}
+{{- printf "%s-auth" (include "conductor.fullname" . | trunc 58 | trimSuffix "-") -}}
+{{- end -}}
+
+{{- define "conductor.backendServiceName" -}}
+{{- if .Values.oauth2Proxy.enabled -}}
+{{- include "conductor.oauth2Proxy.serviceName" . -}}
+{{- else -}}
+{{- include "conductor.fullname" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "conductor.oauth2Proxy.secretName" -}}
+{{- default (printf "%s-oauth2-proxy" (include "conductor.fullname" .)) .Values.oauth2Proxy.existingSecret -}}
+{{- end -}}
+
+{{- define "conductor.oauth2Proxy.clientSecretKey" -}}
+{{- if .Values.oauth2Proxy.existingSecret -}}
+{{- .Values.oauth2Proxy.existingSecretClientKey -}}
+{{- else -}}
+client-secret
+{{- end -}}
+{{- end -}}
+
+{{- define "conductor.oauth2Proxy.cookieSecretKey" -}}
+{{- if .Values.oauth2Proxy.existingSecret -}}
+{{- .Values.oauth2Proxy.existingSecretCookieKey -}}
+{{- else -}}
+cookie-secret
+{{- end -}}
+{{- end -}}
+
+{{- define "conductor.oauth2Proxy.host" -}}
+{{- if .Values.route.enabled -}}
+{{- .Values.route.host -}}
+{{- else if .Values.ingress.enabled -}}
+{{- include "conductor.ingress.host" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "conductor.oauth2Proxy.redirectUrl" -}}
+{{- default (printf "https://%s/oauth2/callback" (include "conductor.oauth2Proxy.host" .)) .Values.oauth2Proxy.oidc.redirectUrl -}}
+{{- end -}}
+
 {{- define "conductor.route.tlsSecretName" -}}
 {{- if .Values.route.tls.certificate.enabled -}}
 {{- default (printf "tls-%s" (include "conductor.fullname" .)) .Values.route.tls.secretName -}}
@@ -163,5 +207,37 @@ true
 {{- end -}}
 {{- if and .Values.ingress.enabled (not (include "conductor.ingress.host" .)) -}}
 {{- fail "ingress.enabled is on and there is no hostname to publish. Set ingress.host, or leave it empty and set route.host, which it falls back to." -}}
+{{- end -}}
+{{- if .Values.oauth2Proxy.enabled -}}
+{{- $proxy := .Values.oauth2Proxy -}}
+{{- if not $proxy.oidc.issuerUrl -}}
+{{- fail "oauth2Proxy.oidc.issuerUrl is not set, and oauth2Proxy.enabled is on. It is the OIDC issuer the proxy reads its endpoints from, for a Keycloak realm https://keycloak.example/auth/realms/<realm>." -}}
+{{- end -}}
+{{- if not $proxy.oidc.clientId -}}
+{{- fail "oauth2Proxy.oidc.clientId is not set, and oauth2Proxy.enabled is on. It is the ID of the client registered for this host at the identity provider. It is needed with oauth2Proxy.existingSecret too: that Secret holds only the client secret and the cookie secret." -}}
+{{- end -}}
+{{- if and (not $proxy.existingSecret) (not (and $proxy.clientSecret $proxy.cookieSecret)) -}}
+{{- fail "oauth2Proxy.existingSecret is not set and oauth2Proxy.clientSecret or oauth2Proxy.cookieSecret is empty, so the proxy has no client secret or no key for its session cookie. Pass both, or point oauth2Proxy.existingSecret at a Secret holding them under oauth2Proxy.existingSecretClientKey and oauth2Proxy.existingSecretCookieKey." -}}
+{{- end -}}
+{{- if not (or .Values.route.enabled .Values.ingress.enabled) -}}
+{{- fail "oauth2Proxy.enabled is on and neither route.enabled nor ingress.enabled is. The proxy only guards the route and the ingress of this release; the Service inside the cluster stays open either way, so with neither there is nothing for it to guard. Turn one of them on, or turn oauth2Proxy.enabled off." -}}
+{{- end -}}
+{{- if ne .Values.service.type "ClusterIP" -}}
+{{- fail (printf "service.type is %s, and oauth2Proxy.enabled is on. The Service %s asks for no login, and as a %s it is reachable from outside the cluster without going through the proxy. Keep service.type at ClusterIP and publish through route or ingress, which go through the proxy." .Values.service.type (include "conductor.fullname" .) .Values.service.type) -}}
+{{- end -}}
+{{- if and .Values.route.enabled .Values.ingress.enabled (ne .Values.route.host (include "conductor.ingress.host" .)) -}}
+{{- fail (printf "route.host is %s and the ingress hostname is %s, and oauth2Proxy.enabled is on. The proxy sends every login back to route.host and lets it return to no other host, so a login started on the ingress host would end on the route host. Give both the same host (an empty ingress.host falls back to route.host), or turn one of them off." .Values.route.host (include "conductor.ingress.host" .)) -}}
+{{- end -}}
+{{- if and (not (include "conductor.oauth2Proxy.host" .)) (not $proxy.oidc.redirectUrl) -}}
+{{- fail "oauth2Proxy.oidc.redirectUrl is not set and there is no hostname to make it from. It defaults to https://<host>/oauth2/callback, with route.host when route.enabled is on and with the ingress hostname otherwise; set that host, or set oauth2Proxy.oidc.redirectUrl." -}}
+{{- end -}}
+{{- if has (int $proxy.port) (list 8080 5000) -}}
+{{- fail (printf "oauth2Proxy.port is %d. The proxy shares the pod's network with the server, which holds 8080 for the API and the UI and 5000 for its own nginx, so the proxy could not listen there; pick another port, 4180 by default." (int $proxy.port)) -}}
+{{- end -}}
+{{- with $proxy.cookieSecret -}}
+{{- if not (or (has (len .) (list 16 24 32)) (regexMatch "^[A-Za-z0-9_-]{22}$" .) (regexMatch "^[A-Za-z0-9_-]{43}=?$" .)) -}}
+{{- fail (printf "oauth2Proxy.cookieSecret is %d bytes long, and the proxy cannot make the AES key of its session cookie from it. It takes 16, 24 or 32 bytes as they are, or the URL-safe base64 of 16 or 32 bytes: 22, 43, or 44 characters ending in =, with - and _ where plain base64 has + and /. openssl rand -hex 16 prints a key of 32 bytes; openssl rand -base64 32 | tr -- '+/' '-_' prints one of 44 characters." (len .)) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}

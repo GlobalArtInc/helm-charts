@@ -18,7 +18,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/secret: {{ print (include (print $.Template.BasePath "/secret.yaml") .) (include (print $.Template.BasePath "/oauth2-proxy-secret.yaml") .) | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -98,10 +98,110 @@ spec:
             - name: config
               mountPath: /app/config
               readOnly: true
+        {{- if .Values.oauth2Proxy.enabled }}
+        {{- $proxy := .Values.oauth2Proxy }}
+        {{- $host := include "conductor.oauth2Proxy.host" . }}
+        - name: oauth2-proxy
+          image: {{ printf "%s:%s" $proxy.image.repository $proxy.image.tag | quote }}
+          imagePullPolicy: {{ $proxy.image.pullPolicy }}
+          securityContext:
+            {{- if $proxy.securityContext }}
+            {{- toYaml $proxy.securityContext | nindent 12 }}
+            {{- else }}
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            {{- end }}
+          args:
+            - --provider=oidc
+            - {{ printf "--oidc-issuer-url=%s" $proxy.oidc.issuerUrl | quote }}
+            - {{ printf "--redirect-url=%s" (include "conductor.oauth2Proxy.redirectUrl" .) | quote }}
+            - --upstream=http://127.0.0.1:8080/
+            - {{ printf "--http-address=0.0.0.0:%d" (int $proxy.port) | quote }}
+            {{- range $proxy.emailDomains }}
+            - {{ printf "--email-domain=%s" . | quote }}
+            {{- end }}
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - {{ printf "--cookie-expire=%s" $proxy.cookieExpire | quote }}
+            {{- with $proxy.cookieRefresh }}
+            - {{ printf "--cookie-refresh=%s" . | quote }}
+            {{- end }}
+            - --code-challenge-method=S256
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - {{ printf "--whitelist-domain=%s" $host | quote }}
+            {{- range $proxy.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: auth
+              containerPort: {{ $proxy.port }}
+              protocol: TCP
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              {{- if $proxy.existingSecret }}
+              value: {{ $proxy.oidc.clientId | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "conductor.oauth2Proxy.secretName" . }}
+                  key: client-id
+              {{- end }}
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "conductor.oauth2Proxy.secretName" . }}
+                  key: {{ include "conductor.oauth2Proxy.clientSecretKey" . }}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "conductor.oauth2Proxy.secretName" . }}
+                  key: {{ include "conductor.oauth2Proxy.cookieSecretKey" . }}
+            {{- with $proxy.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $proxy.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: auth
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: auth
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            {{- if $proxy.resources }}
+            {{- toYaml $proxy.resources | nindent 12 }}
+            {{- else }}
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+            {{- end }}
+        {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ include "conductor.fullname" . }}
+        {{- if .Values.oauth2Proxy.enabled }}
+        {{- with .Values.oauth2Proxy.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

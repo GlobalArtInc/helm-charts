@@ -401,6 +401,107 @@
       },
       "additionalProperties": false
     },
+    "oauth2Proxy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "oidc": {
+          "type": "object",
+          "properties": {
+            "issuerUrl": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "redirectUrl": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "cookieSecret": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "string"
+        },
+        "existingSecretClientKey": {
+          "type": "string"
+        },
+        "existingSecretCookieKey": {
+          "type": "string"
+        },
+        "cookieExpire": {
+          "type": "string",
+          "pattern": "^(0|([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+)$"
+        },
+        "cookieRefresh": {
+          "type": "string",
+          "pattern": "^(|0|([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+)$"
+        },
+        "emailDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extraEnv": {
+          "type": "array"
+        },
+        "extraVolumes": {
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "type": "array"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "securityContext": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
     "metrics": {
       "type": "object",
       "properties": {

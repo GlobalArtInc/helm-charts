@@ -14,3 +14,23 @@ spec:
       appProtocol: http
   selector:
     {{- include "conductor.selectorLabels" . | nindent 4 }}
+{{- if .Values.oauth2Proxy.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conductor.oauth2Proxy.serviceName" . }}
+  labels:
+    {{- include "conductor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth
+spec:
+  type: ClusterIP
+  ports:
+    - name: auth
+      port: {{ .Values.service.port }}
+      targetPort: auth
+      protocol: TCP
+      appProtocol: http
+  selector:
+    {{- include "conductor.selectorLabels" . | nindent 4 }}
+{{- end }}

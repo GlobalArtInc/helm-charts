@@ -111,6 +111,33 @@ ingress:
   tls:
     secretName: ""
 
+oauth2Proxy:
+  enabled: false
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: "v7.15.6"
+    pullPolicy: IfNotPresent
+  port: 4180
+  oidc:
+    issuerUrl: ""
+    clientId: ""
+    redirectUrl: ""
+  clientSecret: ""
+  cookieSecret: ""
+  existingSecret: ""
+  existingSecretClientKey: client-secret
+  existingSecretCookieKey: cookie-secret
+  cookieExpire: "12h"
+  cookieRefresh: ""
+  emailDomains:
+    - "*"
+  extraArgs: []
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  resources: {}
+  securityContext: {}
+
 metrics:
   enabled: false
   path: /actuator/prometheus

@@ -1,6 +1,6 @@
 {{ .Chart.Name }} {{ .Chart.Version }} installed as {{ .Release.Name }}.
 
-The UI and the API are on one port, {{ .Values.service.port }}. Conductor OSS has no authentication of its own: anyone who can reach that port can read, start and terminate workflows. {{ if or .Values.route.enabled .Values.ingress.enabled }}Whatever publishes it below is the only gate there is.{{ else }}Nothing publishes it from this release.{{ end }}
+The UI and the API are on one port, {{ .Values.service.port }}. Conductor OSS has no authentication of its own: anyone who can reach that port can read, start and terminate workflows. {{ if .Values.oauth2Proxy.enabled }}The addresses below go through oauth2-proxy and ask for an OIDC login at {{ .Values.oauth2Proxy.oidc.issuerUrl }}. The Service {{ include "conductor.fullname" . }} inside the cluster does not: whoever reaches it there needs no login.{{ else if or .Values.route.enabled .Values.ingress.enabled }}Whatever publishes it below is the only gate there is.{{ else }}Nothing publishes it from this release.{{ end }}
 {{- if .Values.route.enabled }}
 
 Gateway API: https://{{ .Values.route.host }}
@@ -8,6 +8,10 @@ Gateway API: https://{{ .Values.route.host }}
 {{- if .Values.ingress.enabled }}
 
 Ingress: https://{{ include "conductor.ingress.host" . }}
+{{- end }}
+{{- if .Values.oauth2Proxy.enabled }}
+
+The client {{ .Values.oauth2Proxy.oidc.clientId }} has to list {{ include "conductor.oauth2Proxy.redirectUrl" . }} among its valid redirect URIs.
 {{- end }}
 
 Workers in this cluster reach the API at

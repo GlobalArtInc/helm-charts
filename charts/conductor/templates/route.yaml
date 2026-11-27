@@ -99,6 +99,6 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ include "conductor.fullname" . }}
+        - name: {{ include "conductor.backendServiceName" . }}
           port: {{ .Values.service.port }}
 {{- end }}

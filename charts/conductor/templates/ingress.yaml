@@ -30,7 +30,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "conductor.fullname" . }}
+                name: {{ include "conductor.backendServiceName" . }}
                 port:
                   number: {{ .Values.service.port }}
 {{- end }}
